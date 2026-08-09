@@ -4,7 +4,6 @@
 package config
 
 import (
-	"flag"
 	"time"
 
 	"github.com/hariomop12/go-storm/pkg/storm"
@@ -14,44 +13,30 @@ import (
 // Returning storm.Config (not a config-specific type) keeps a single
 // source of truth for what a load test needs.
 
-type Flags struct {
+type Options struct {
 	Config storm.Config
 	Format string
 	Output string
 }
 
-func ParseFlags() Flags {
-	url := flag.String("url", "https://hariomtanu.com", "Target URL")
-	total := flag.Int("n", 100, "Total requests")
-	concurrency := flag.Int("c", 10, "Concurrency level")
-	method := flag.String("method", "GET", "HTTP Method")
-	timeout := flag.Int("timeout", 10, "Request timeout in seconds")
-	rate := flag.Int("rate", 0, "Max requests per second (0 = unlimited)")
-	format := flag.String("format", "text", "Output format: text or json")
-	output := flag.String("output", "", "Write report to a file")
-	body := flag.String("body", "", "Request body, e.g. --body '{\"name\":\"hariom\"}'")
-
-	flag.Parse()
-
+func Build(url, method, body string, total, concurrency, timeout, rate int) Options {
 	var payload []byte
 	switch {
-	case *body != "":
-		payload = []byte(*body)
-	case *method == "POST" || *method == "PUT":
-		payload = []byte(`{"test":"data"}`)
+	case body != "":
+		payload = []byte(body)
+	case method == "POST" || method == "PUT":
+		payload = []byte(`{"test": "data"}`)
 	}
 
-	return Flags{
+	return Options{
 		Config: storm.Config{
-			URL:         *url,
-			TotalReqs:   *total,
-			Concurrency: *concurrency,
-			Timeout:     time.Duration(*timeout) * time.Second,
-			Method:      *method,
+			URL:         url,
+			TotalReqs:   total,
+			Concurrency: concurrency,
+			Timeout:     time.Duration(timeout) * time.Second,
+			Method:      method,
 			Payload:     payload,
-			Rate:        *rate,
+			Rate:        rate,
 		},
-		Format: *format,
-		Output: *output,
 	}
 }

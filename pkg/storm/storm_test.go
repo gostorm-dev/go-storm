@@ -407,3 +407,37 @@ func TestCollectResultsPercentiles(t *testing.T) {
 		t.Errorf("P99 = %v, want %v", lt.stats.P99, 100*time.Millisecond)
 	}
 }
+
+func TestCompletedCounter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := Config{
+		URL:         srv.URL,
+		TotalReqs:   500,
+		Concurrency: 10,
+		Timeout:     time.Second,
+		Method:      "GET",
+	}
+
+	lt := NewLoadTester(context.Background(), cfg)
+
+	done := make(chan struct{})
+	go func() {
+		lt.Run()
+		close(done)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	if lt.Completed() <= 0 {
+		t.Error("Completed() should be > 0 while the test is running")
+	}
+
+	<-done
+	if lt.Completed() != 500 {
+		t.Errorf("Completed() = %d, want 500", lt.Completed())
+	}
+}

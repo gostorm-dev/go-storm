@@ -8,14 +8,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/time/rate"
 	"math"
 	"net/http"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
 // Config holds the input configuration for a load test.
@@ -66,16 +66,17 @@ type Stats struct {
 
 // LoadTester runs the producer → worker pool → consumer pipeline.
 type LoadTester struct {
-	config  Config
-	client  *http.Client
-	jobs    chan Job
-	results chan Result
-	wg      sync.WaitGroup
-	ctx     context.Context
-	cancel  context.CancelFunc
-	stats   Stats
-	statsMu sync.Mutex
-	limiter *rate.Limiter
+	config    Config
+	client    *http.Client
+	jobs      chan Job
+	results   chan Result
+	wg        sync.WaitGroup
+	ctx       context.Context
+	cancel    context.CancelFunc
+	stats     Stats
+	statsMu   sync.Mutex
+	limiter   *rate.Limiter
+	completed atomic.Int64
 }
 
 // Validate checks the config before a run starts.
@@ -119,12 +120,9 @@ func NewLoadTester(ctx context.Context, config Config) *LoadTester {
 func (lt *LoadTester) worker(id int) {
 	defer lt.wg.Done()
 
-	fmt.Printf("Worker %d started\n", id)
-
 	for {
 		select {
 		case <-lt.ctx.Done():
-			fmt.Printf("Worker %d stopping\n", id)
 			return
 
 		case job, ok := <-lt.jobs:
@@ -132,6 +130,7 @@ func (lt *LoadTester) worker(id int) {
 				return
 			}
 			result := lt.executeRequest(job)
+			lt.completed.Add(1)
 			select {
 			case lt.results <- result:
 
@@ -140,6 +139,10 @@ func (lt *LoadTester) worker(id int) {
 			}
 		}
 	}
+}
+
+func (lt *LoadTester) Completed() int64 {
+	return lt.completed.Load()
 }
 
 // executeRequest performs a single HTTP request and records its result.
