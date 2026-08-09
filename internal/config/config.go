@@ -19,6 +19,7 @@ func ParseFlags() storm.Config {
 	concurrency := flag.Int("c", 10, "Concurrency level")
 	method := flag.String("method", "GET", "HTTP Method")
 	timeout := flag.Int("timeout", 10, "Request timeout in seconds")
+	rate := flag.Int("rate", 0, "Max requests per second (0 = unlimited)")
 
 	flag.Parse()
 
@@ -34,5 +35,6 @@ func ParseFlags() storm.Config {
 		Timeout:     time.Duration(*timeout) * time.Second,
 		Method:      *method,
 		Payload:     payload,
+		Rate:        *rate,
 	}
 }

@@ -247,3 +247,59 @@ func TestRunCancellation(t *testing.T) {
 		t.Fatal("Run did not return after cancellation — possible deadlock")
 	}
 }
+
+func TestRateLimiting(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := Config{
+		URL:         srv.URL,
+		TotalReqs:   100,
+		Concurrency: 10,
+		Timeout:     time.Second,
+		Method:      "GET",
+		Rate:        50,
+	}
+
+	lt := NewLoadTester(context.Background(), cfg)
+
+	start := time.Now()
+
+	if _, err := lt.Run(); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	elapsed := time.Since(start)
+
+	if elapsed < 500*time.Millisecond {
+		t.Errorf("rate limiter not working: 100 req at 50/sec took %v, want >= 500ms", elapsed)
+	}
+}
+
+func TestConfigValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     Config
+		wantErr bool
+	}{
+		{"valid", Config{TotalReqs: 10, Concurrency: 2, Rate: 10}, false},
+		{"zero rate is unlimited", Config{TotalReqs: 10, Concurrency: 2, Rate: 0}, false},
+		{"negative rate invalid", Config{TotalReqs: 10, Concurrency: 2, Rate: -1}, true},
+		{"zero total invalid", Config{TotalReqs: 0, Concurrency: 2}, true},
+		{"zero concurrency invalid", Config{TotalReqs: 10, Concurrency: 0}, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.cfg.Validate()
+			if tc.wantErr && err == nil {
+				t.Error("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}

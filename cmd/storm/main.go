@@ -21,6 +21,7 @@ func main() {
 	fmt.Printf("Target: %s\n", cfg.URL)
 	fmt.Printf("Total: %d requests\n", cfg.TotalReqs)
 	fmt.Printf("Concurrency: %d workers\n", cfg.Concurrency)
+	fmt.Printf("Rate: %d req/sec\n", cfg.Rate)
 	fmt.Println("Running...")
 
 	// signal.NotifyContext wires Ctrl+C / SIGTERM into the context,

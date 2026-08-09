@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"golang.org/x/time/rate"
 	"net/http"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ type Config struct {
 	Timeout     time.Duration // Request timeout
 	Method      string        // GET, POST, PUT, DELETE
 	Payload     []byte        // For POST requests
+	Rate        int           // Max requests per second (0 = unlimited)
 }
 
 // Job represents a single request task.
@@ -66,6 +68,21 @@ type LoadTester struct {
 	cancel  context.CancelFunc
 	stats   Stats
 	statsMu sync.Mutex
+	limiter *rate.Limiter
+}
+
+// Validate checks the config before a run starts.
+func (c Config) Validate() error {
+	if c.Rate < 0 {
+		return fmt.Errorf("rate cannot be negative, got %d", c.Rate)
+	}
+	if c.TotalReqs <= 0 {
+		return fmt.Errorf("total requests must be positive, got %d", c.TotalReqs)
+	}
+	if c.Concurrency <= 0 {
+		return fmt.Errorf("concurrency must be positive, got %d", c.Concurrency)
+	}
+	return nil
 }
 
 // NewLoadTester builds a LoadTester from config.
@@ -73,7 +90,7 @@ type LoadTester struct {
 func NewLoadTester(ctx context.Context, config Config) *LoadTester {
 	ctx, cancel := context.WithCancel(ctx)
 
-	return &LoadTester{
+	lt := &LoadTester{
 		config: config,
 		client: &http.Client{
 			Timeout: config.Timeout,
@@ -83,6 +100,12 @@ func NewLoadTester(ctx context.Context, config Config) *LoadTester {
 		ctx:     ctx,
 		cancel:  cancel,
 	}
+
+	if config.Rate > 0 {
+		lt.limiter = rate.NewLimiter(rate.Limit(config.Rate), config.Rate)
+	}
+
+	return lt
 }
 
 // worker is a single concurrent consumer of the jobs channel.
@@ -167,6 +190,12 @@ func (lt *LoadTester) produceJobs() {
 	defer close(lt.jobs)
 
 	for i := 0; i < lt.config.TotalReqs; i++ {
+		if lt.limiter != nil {
+			if err := lt.limiter.Wait(lt.ctx); err != nil {
+				return
+			}
+		}
+
 		job := Job{
 			ID:     i + 1,
 			URL:    lt.config.URL,
@@ -195,9 +224,10 @@ func (lt *LoadTester) collectResults() {
 	)
 
 	firstResult := true
+	resultsReceived := 0
 
 	for result := range lt.results {
-
+		resultsReceived++
 		if result.Error != nil {
 			failCount++
 
@@ -205,7 +235,6 @@ func (lt *LoadTester) collectResults() {
 				errors,
 				fmt.Sprintf("Job %d: %v", result.JobID, result.Error),
 			)
-
 			continue
 		}
 
@@ -242,7 +271,7 @@ func (lt *LoadTester) collectResults() {
 	lt.statsMu.Lock()
 
 	lt.stats = Stats{
-		TotalRequests:   lt.config.TotalReqs,
+		TotalRequests:   resultsReceived,
 		Successful:      successCount,
 		Failed:          failCount,
 		MinResponseTime: minDuration,
@@ -257,6 +286,10 @@ func (lt *LoadTester) collectResults() {
 
 // Run starts workers and producer, waits for completion, returns Stats.
 func (lt *LoadTester) Run() (Stats, error) {
+	if err := lt.config.Validate(); err != nil {
+		return Stats{}, err
+	}
+
 	startTime := time.Now()
 
 	// Start workers
