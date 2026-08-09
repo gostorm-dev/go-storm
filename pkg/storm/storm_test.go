@@ -2,6 +2,7 @@ package storm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -301,5 +302,48 @@ func TestConfigValidate(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestJSONRepost(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	cfg := Config{
+		URL:         srv.URL,
+		TotalReqs:   10,
+		Concurrency: 2,
+		Timeout:     time.Second,
+		Method:      "GET",
+	}
+
+	lt := NewLoadTester(context.Background(), cfg)
+	if _, err := lt.Run(); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	data, err := lt.JSONReport()
+	if err != nil {
+		t.Fatalf("JSONReport returned error: %v", err)
+	}
+
+	var report Report
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	if report.TotalRequests != 10 {
+		t.Errorf("TotalRequests = %d, want 10", report.TotalRequests)
+	}
+	if report.Successful != 10 {
+		t.Errorf("Successful = %d, want 10", report.Successful)
+	}
+	if report.URL != srv.URL {
+		t.Errorf("URL = %q, want %q", report.URL, srv.URL)
+	}
+	if report.StatusCodes[200] != 10 {
+		t.Errorf("StatusCodes[200] = %d, want 10", report.StatusCodes[200])
 	}
 }

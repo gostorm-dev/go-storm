@@ -5,6 +5,10 @@
 # Test coverage output
 coverage.out
 
+# Generated reports
+/report.json
+*.json.tmp
+
 # IDE / editor
 .idea/
 .vscode/

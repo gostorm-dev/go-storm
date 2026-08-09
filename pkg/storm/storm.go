@@ -6,6 +6,7 @@ package storm
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"golang.org/x/time/rate"
 	"net/http"
@@ -364,4 +365,51 @@ func (lt *LoadTester) PrintStats() {
 		}
 	}
 	fmt.Println(strings.Repeat("=", 60))
+}
+
+// Report combines run metadata with results for machine-readable output.
+type Report struct {
+	URL             string        `json:"url"`
+	Method          string        `json:"method"`
+	Concurrency     int           `json:"concurrency"`
+	Rate            int           `json:"rate"`
+	TotalRequests   int           `json:"total_requests"`
+	Successful      int           `json:"successful"`
+	Failed          int           `json:"failed"`
+	SuccessRate     float64       `json:"success_rate"`
+	MinResponseTime time.Duration `json:"min_response_time_ns"`
+	MaxResponseTime time.Duration `json:"max_response_time_ns"`
+	AvgResponseTime time.Duration `json:"avg_response_time_ns"`
+	RequestsPerSec  float64       `json:"requests_per_sec"`
+	TotalDuration   time.Duration `json:"total_duration_ns"`
+	StatusCodes     map[int]int   `json:"status_codes"`
+	Errors          []string      `json:"errors,omitempty"`
+}
+
+// JSONReport serializes the run results as indented JSON.
+func (lt *LoadTester) JSONReport() ([]byte, error) {
+	stats := lt.stats
+
+	successRate := 0.0
+	if stats.TotalRequests > 0 {
+		successRate = float64(stats.Successful) / float64(stats.TotalRequests) * 100
+	}
+	report := Report{
+		URL:             lt.config.URL,
+		Method:          lt.config.Method,
+		Concurrency:     lt.config.Concurrency,
+		Rate:            lt.config.Rate,
+		TotalRequests:   stats.TotalRequests,
+		Successful:      stats.Successful,
+		Failed:          stats.Failed,
+		SuccessRate:     successRate,
+		MinResponseTime: stats.MinResponseTime,
+		MaxResponseTime: stats.MaxResponseTime,
+		AvgResponseTime: stats.AvgResponseTime,
+		RequestsPerSec:  stats.RequestsPerSec,
+		TotalDuration:   stats.TotalDuration,
+		StatusCodes:     stats.StatusCodes,
+		Errors:          stats.Errors,
+	}
+	return json.MarshalIndent(report, "", "  ")
 }

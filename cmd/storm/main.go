@@ -15,7 +15,8 @@ import (
 )
 
 func main() {
-	cfg := config.ParseFlags()
+	flags := config.ParseFlags()
+	cfg := flags.Config
 
 	fmt.Println("Starting Load Test")
 	fmt.Printf("Target: %s\n", cfg.URL)
@@ -33,5 +34,21 @@ func main() {
 	if _, err := tester.Run(); err != nil {
 		log.Fatal("Test failed:", err)
 	}
-	tester.PrintStats()
+
+	switch flags.Format {
+	case "json":
+		data, err := tester.JSONReport()
+		if err != nil {
+			log.Fatal("JSON report failed:", err)
+		}
+		if flags.Output != "" {
+			if err := os.WriteFile(flags.Output, data, 0644); err != nil {
+				log.Fatal("write report:", err)
+			}
+			fmt.Printf("Report saved to %s\n", flags.Output)
+		}
+		fmt.Println(string(data))
+	default:
+		tester.PrintStats()
+	}
 }
