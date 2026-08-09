@@ -8,11 +8,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/time/rate"
+	"math"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // Config holds the input configuration for a load test.
@@ -53,6 +56,9 @@ type Stats struct {
 	MaxResponseTime time.Duration
 	AvgResponseTime time.Duration
 	TotalDuration   time.Duration
+	P50             time.Duration
+	P95             time.Duration
+	P99             time.Duration
 	RequestsPerSec  float64
 	StatusCodes     map[int]int
 	Errors          []string
@@ -222,6 +228,7 @@ func (lt *LoadTester) collectResults() {
 		failCount     int
 		statusCodes   = make(map[int]int)
 		errors        []string
+		duration      []time.Duration
 	)
 
 	firstResult := true
@@ -247,6 +254,7 @@ func (lt *LoadTester) collectResults() {
 		}
 
 		totalDuration += result.Duration
+		duration = append(duration, result.Duration)
 
 		if firstResult {
 			minDuration = result.Duration
@@ -270,6 +278,9 @@ func (lt *LoadTester) collectResults() {
 	}
 
 	lt.statsMu.Lock()
+	sort.Slice(duration, func(i, j int) bool {
+		return duration[i] < duration[j]
+	})
 
 	lt.stats = Stats{
 		TotalRequests:   resultsReceived,
@@ -278,11 +289,28 @@ func (lt *LoadTester) collectResults() {
 		MinResponseTime: minDuration,
 		MaxResponseTime: maxDuration,
 		AvgResponseTime: avgDuration,
-		StatusCodes:     statusCodes,
-		Errors:          errors,
+		P50:             percentile(duration, 50),
+		P95:             percentile(duration, 95),
+		P99:             percentile(duration, 99),
+
+		StatusCodes: statusCodes,
+		Errors:      errors,
 	}
 
 	lt.statsMu.Unlock()
+}
+
+// percentile returns the duration at the given percentile (0-100)
+// of a sorted slice, using the nearest-rank method.
+func percentile(durations []time.Duration, pct float64) time.Duration {
+	if len(durations) == 0 {
+		return 0
+	}
+	idx := int(math.Ceil(float64(len(durations)) * pct / 100))
+	if idx < 1 {
+		idx = 1
+	}
+	return durations[idx-1]
 }
 
 // Run starts workers and producer, waits for completion, returns Stats.
@@ -350,6 +378,9 @@ func (lt *LoadTester) PrintStats() {
 	fmt.Printf("Min Response: %v\n", stats.MinResponseTime)
 	fmt.Printf("Max Response: %v\n", stats.MaxResponseTime)
 	fmt.Printf("Avg Response: %v\n", stats.AvgResponseTime)
+	fmt.Printf("p50 Response: %v\n", stats.P50)
+	fmt.Printf("p95 Response: %v\n", stats.P95)
+	fmt.Printf("p99 Response: %v\n", stats.P99)
 	fmt.Printf("Requests/sec: %.2f\n", stats.RequestsPerSec)
 	fmt.Printf("Total Duration: %v\n", stats.TotalDuration)
 	fmt.Println(strings.Repeat("-", 60))
@@ -380,6 +411,9 @@ type Report struct {
 	MinResponseTime time.Duration `json:"min_response_time_ns"`
 	MaxResponseTime time.Duration `json:"max_response_time_ns"`
 	AvgResponseTime time.Duration `json:"avg_response_time_ns"`
+	P50             time.Duration `json:"p50_ns"`
+	P95             time.Duration `json:"p95_ns"`
+	P99             time.Duration `json:"p99_ns"`
 	RequestsPerSec  float64       `json:"requests_per_sec"`
 	TotalDuration   time.Duration `json:"total_duration_ns"`
 	StatusCodes     map[int]int   `json:"status_codes"`
@@ -406,6 +440,9 @@ func (lt *LoadTester) JSONReport() ([]byte, error) {
 		MinResponseTime: stats.MinResponseTime,
 		MaxResponseTime: stats.MaxResponseTime,
 		AvgResponseTime: stats.AvgResponseTime,
+		P50:             stats.P50,
+		P95:             stats.P95,
+		P99:             stats.P99,
 		RequestsPerSec:  stats.RequestsPerSec,
 		TotalDuration:   stats.TotalDuration,
 		StatusCodes:     stats.StatusCodes,

@@ -347,3 +347,63 @@ func TestJSONRepost(t *testing.T) {
 		t.Errorf("StatusCodes[200] = %d, want 10", report.StatusCodes[200])
 	}
 }
+
+func TestPercentile(t *testing.T) {
+	durations := []time.Duration{
+		10 * time.Millisecond,
+		20 * time.Millisecond,
+		30 * time.Millisecond,
+		40 * time.Millisecond,
+		50 * time.Millisecond,
+		60 * time.Millisecond,
+		70 * time.Millisecond,
+		80 * time.Millisecond,
+		90 * time.Millisecond,
+		100 * time.Millisecond,
+	}
+
+	tests := []struct {
+		name string
+		pct  float64
+		want time.Duration
+	}{
+		{"p50", 50, 50 * time.Millisecond},
+		{"p95", 95, 100 * time.Millisecond},
+		{"p99", 99, 100 * time.Millisecond},
+		{"p100", 100, 100 * time.Millisecond},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := percentile(durations, tc.pct)
+			if got != tc.want {
+				t.Errorf("percentile(%v) = %v, want %v", tc.pct, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCollectResultsPercentiles(t *testing.T) {
+	results := make(chan Result, 10)
+	for i := 0; i < 10; i++ {
+		results <- Result{StatusCode: 200, Duration: time.Duration(i+1) * 10 * time.Millisecond}
+	}
+	close(results)
+
+	lt := &LoadTester{
+		config:  Config{TotalReqs: 10},
+		results: results,
+	}
+
+	lt.collectResults()
+
+	if lt.stats.P50 != 50*time.Millisecond {
+		t.Errorf("P50 = %v, want %v", lt.stats.P50, 50*time.Millisecond)
+	}
+	if lt.stats.P95 != 100*time.Millisecond {
+		t.Errorf("P95 = %v, want %v", lt.stats.P95, 100*time.Millisecond)
+	}
+	if lt.stats.P99 != 100*time.Millisecond {
+		t.Errorf("P99 = %v, want %v", lt.stats.P99, 100*time.Millisecond)
+	}
+}
