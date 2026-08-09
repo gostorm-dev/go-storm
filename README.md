@@ -10,7 +10,7 @@ Built with classic Go concurrency patterns: **producer → rate-limited pipeline
 - Rate limiting via token bucket (`-rate` requests per second)
 - Supports GET / POST / PUT / DELETE
 - Per-request timeout
-- Rich statistics: min/avg/max response time, requests/sec, success rate
+- Rich statistics: min/avg/max response time, p50/p95/p99 percentiles, requests/sec, success rate
 - Status code distribution breakdown
 - JSON report output (`--format json`) with optional file export (`--output`)
 - Graceful shutdown on `Ctrl+C` (SIGINT / SIGTERM)
@@ -95,6 +95,9 @@ Success Rate: 99.80%
 Min Response: 12ms
 Max Response: 3.2s
 Avg Response: 145ms
+p50 Response: 90ms
+p95 Response: 1.1s
+p99 Response: 2.4s
 Requests/sec: 512.34
 Total Duration: 1.95s
 ------------------------------------------------------------
@@ -119,6 +122,9 @@ Status Code Distribution:
   "min_response_time_ns": 1096309,
   "max_response_time_ns": 206533112,
   "avg_response_time_ns": 7362558,
+  "p50_ns": 4200000,
+  "p95_ns": 18100000,
+  "p99_ns": 95300000,
   "requests_per_sec": 526.13,
   "total_duration_ns": 19006763064,
   "status_codes": {
@@ -167,6 +173,7 @@ go test ./... -race -v
 - `RateLimiting` — token bucket actually throttles
 - `ConfigValidate` — invalid config rejected
 - `JSONReport` — JSON round-trip correctness
+- `Percentile` / `CollectResultsPercentiles` — p50/p95/p99 calculation
 
 ## Project Structure
 
