@@ -1,0 +1,13 @@
+# Compiled binary
+/go-storm
+*.exe
+
+# Test coverage output
+coverage.out
+
+# IDE / editor
+.idea/
+.vscode/
+
+# OS files
+.DS_Store

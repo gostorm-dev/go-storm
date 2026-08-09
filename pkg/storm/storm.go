@@ -1,21 +1,20 @@
-package main
+// Package storm provides the core HTTP load testing engine.
+// This is the public library API — anyone can import it and build
+// their own CLI or tooling on top of it.
+package storm
 
 import (
 	"bytes"
 	"context"
-	"flag"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
-	"os/signal"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
-// Input Configuration
+// Config holds the input configuration for a load test.
+// Imported by both the CLI (cmd/storm) and any external library user.
 type Config struct {
 	URL         string        // API endpoint
 	TotalReqs   int           // Total requests to send
@@ -25,7 +24,7 @@ type Config struct {
 	Payload     []byte        // For POST requests
 }
 
-// Job represents a single request task
+// Job represents a single request task.
 type Job struct {
 	ID     int
 	URL    string
@@ -33,7 +32,7 @@ type Job struct {
 	Body   []byte
 }
 
-// Result captures response metrics
+// Result captures response metrics for a single request.
 type Result struct {
 	JobID      int
 	StatusCode int
@@ -42,7 +41,7 @@ type Result struct {
 	Timestamp  time.Time
 }
 
-// Aggregate Statistics
+// Stats aggregates the results of a full load test run.
 type Stats struct {
 	TotalRequests   int
 	Successful      int
@@ -56,6 +55,7 @@ type Stats struct {
 	Errors          []string
 }
 
+// LoadTester runs the producer → worker pool → consumer pipeline.
 type LoadTester struct {
 	config  Config
 	client  *http.Client
@@ -68,6 +68,8 @@ type LoadTester struct {
 	statsMu sync.Mutex
 }
 
+// NewLoadTester builds a LoadTester from config.
+// It owns a cancellable context so workers can shut down gracefully.
 func NewLoadTester(ctx context.Context, config Config) *LoadTester {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -83,15 +85,16 @@ func NewLoadTester(ctx context.Context, config Config) *LoadTester {
 	}
 }
 
+// worker is a single concurrent consumer of the jobs channel.
 func (lt *LoadTester) worker(id int) {
 	defer lt.wg.Done()
 
-	fmt.Printf("🚀 Worker %d started\n", id)
+	fmt.Printf("Worker %d started\n", id)
 
 	for {
 		select {
 		case <-lt.ctx.Done():
-			fmt.Printf("🛑 Worker %d stopping\n", id)
+			fmt.Printf("Worker %d stopping\n", id)
 			return
 
 		case job, ok := <-lt.jobs:
@@ -109,6 +112,7 @@ func (lt *LoadTester) worker(id int) {
 	}
 }
 
+// executeRequest performs a single HTTP request and records its result.
 func (lt *LoadTester) executeRequest(job Job) Result {
 	start := time.Now()
 
@@ -157,6 +161,8 @@ func (lt *LoadTester) executeRequest(job Job) Result {
 	}
 }
 
+// produceJobs fills the jobs channel up to TotalReqs.
+// It respects cancellation so a shutdown doesn't leak the goroutine.
 func (lt *LoadTester) produceJobs() {
 	defer close(lt.jobs)
 
@@ -172,11 +178,11 @@ func (lt *LoadTester) produceJobs() {
 		case <-lt.ctx.Done():
 			return
 		case lt.jobs <- job:
-			// job successfully queued
 		}
 	}
 }
 
+// collectResults consumes the results channel and aggregates Stats.
 func (lt *LoadTester) collectResults() {
 	var (
 		totalDuration time.Duration
@@ -249,6 +255,7 @@ func (lt *LoadTester) collectResults() {
 	lt.statsMu.Unlock()
 }
 
+// Run starts workers and producer, waits for completion, returns Stats.
 func (lt *LoadTester) Run() (Stats, error) {
 	startTime := time.Now()
 
@@ -289,83 +296,39 @@ func (lt *LoadTester) Run() (Stats, error) {
 	return stats, nil
 }
 
-// Pretty print results
+// PrintStats renders the aggregated results to stdout.
 func (lt *LoadTester) PrintStats() {
 	stats := lt.stats
 
 	fmt.Println("\n" + strings.Repeat("=", 60))
-	fmt.Println("📊 LOAD TEST RESULTS")
+	fmt.Println("LOAD TEST RESULTS")
 	fmt.Println(strings.Repeat("=", 60))
-	fmt.Printf("📍 URL: %s\n", lt.config.URL)
-	fmt.Printf("🔧 Method: %s\n", lt.config.Method)
-	fmt.Printf("👥 Concurrency: %d\n", lt.config.Concurrency)
-	fmt.Printf("📦 Total Requests: %d\n", stats.TotalRequests)
+	fmt.Printf("URL: %s\n", lt.config.URL)
+	fmt.Printf("Method: %s\n", lt.config.Method)
+	fmt.Printf("Concurrency: %d\n", lt.config.Concurrency)
+	fmt.Printf("Total Requests: %d\n", stats.TotalRequests)
 	fmt.Println(strings.Repeat("-", 60))
-	fmt.Printf("✅ Successful: %d\n", stats.Successful)
-	fmt.Printf("❌ Failed: %d\n", stats.Failed)
-	fmt.Printf("📈 Success Rate: %.2f%%\n",
+	fmt.Printf("Successful: %d\n", stats.Successful)
+	fmt.Printf("Failed: %d\n", stats.Failed)
+	fmt.Printf("Success Rate: %.2f%%\n",
 		float64(stats.Successful)/float64(stats.TotalRequests)*100)
 	fmt.Println(strings.Repeat("-", 60))
-	fmt.Printf("⏱️  Min Response: %v\n", stats.MinResponseTime)
-	fmt.Printf("⏱️  Max Response: %v\n", stats.MaxResponseTime)
-	fmt.Printf("⏱️  Avg Response: %v\n", stats.AvgResponseTime)
-	fmt.Printf("🚀 Requests/sec: %.2f\n", stats.RequestsPerSec)
-	fmt.Printf("⏰ Total Duration: %v\n", stats.TotalDuration)
+	fmt.Printf("Min Response: %v\n", stats.MinResponseTime)
+	fmt.Printf("Max Response: %v\n", stats.MaxResponseTime)
+	fmt.Printf("Avg Response: %v\n", stats.AvgResponseTime)
+	fmt.Printf("Requests/sec: %.2f\n", stats.RequestsPerSec)
+	fmt.Printf("Total Duration: %v\n", stats.TotalDuration)
 	fmt.Println(strings.Repeat("-", 60))
-	fmt.Println("📊 Status Code Distribution:")
+	fmt.Println("Status Code Distribution:")
 	for code, count := range stats.StatusCodes {
 		fmt.Printf("   %d: %d requests\n", code, count)
 	}
 	if len(stats.Errors) > 0 {
 		fmt.Println(strings.Repeat("-", 60))
-		fmt.Println("❌ Errors:")
+		fmt.Println("Errors:")
 		for _, err := range stats.Errors {
 			fmt.Printf("   %s\n", err)
 		}
 	}
 	fmt.Println(strings.Repeat("=", 60))
-}
-
-func main() {
-	// CLI Arguments
-	url := flag.String("url", "https://hariomtanu.com", "Target URL")
-	total := flag.Int("n", 100, "Total requests")
-	concurrency := flag.Int("c", 10, "Concurrency level")
-	method := flag.String("method", "GET", "HTTP Method")
-	timeout := flag.Int("timeout", 10, "Request timeout in seconds")
-
-	flag.Parse()
-
-	// Sample payload for POST requests
-	var payload []byte
-	if *method == "POST" || *method == "PUT" {
-		payload = []byte(`{"test": "data"}`)
-	}
-
-	config := Config{
-		URL:         *url,
-		TotalReqs:   *total,
-		Concurrency: *concurrency,
-		Timeout:     time.Duration(*timeout) * time.Second,
-		Method:      *method,
-		Payload:     payload,
-	}
-
-	fmt.Printf("🚀 Starting Load Test\n")
-	fmt.Printf("📍 Target: %s\n", config.URL)
-	fmt.Printf("📦 Total: %d requests\n", config.TotalReqs)
-	fmt.Printf("👥 Concurrency: %d workers\n", config.Concurrency)
-	fmt.Println("\n⏳ Running...")
-
-	// Create and run load tester
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	tester := NewLoadTester(ctx, config)
-	_, err := tester.Run()
-	if err != nil {
-		log.Fatal("Test failed:", err)
-	}
-	// Print results
-	tester.PrintStats()
 }
