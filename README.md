@@ -7,12 +7,14 @@ Built with classic Go concurrency patterns: **producer → rate-limited pipeline
 ## Features
 
 - Concurrent workers (configurable pool size)
-- Rate limiting via token bucket (`-rate` requests per second)
+- Rate limiting via token bucket (`-r/--rate` requests per second)
 - Supports GET / POST / PUT / DELETE
 - Per-request timeout
 - Rich statistics: min/avg/max response time, p50/p95/p99 percentiles, requests/sec, success rate
 - Status code distribution breakdown
+- Live progress bar with real-time requests/sec
 - JSON report output (`--format json`) with optional file export (`--output`)
+- `report` subcommand to pretty-print a saved JSON report
 - Graceful shutdown on `Ctrl+C` (SIGINT / SIGTERM)
 - Panic-safe and race-free result aggregation
 - Config validation before every run
@@ -20,66 +22,97 @@ Built with classic Go concurrency patterns: **producer → rate-limited pipeline
 ## Quick Start
 
 ```bash
-go run ./cmd/storm
+go run ./cmd/storm run -u https://hariomtanu.com -n 100 -c 10
 ```
 
 Runs 100 requests against `https://hariomtanu.com` with 10 concurrent workers.
 
+## Commands
+
+```bash
+go run ./cmd/storm run [flags]      # run a load test
+go run ./cmd/storm report <file>    # pretty-print a saved JSON report
+go run ./cmd/storm version          # print the version
+```
+
 ## Usage
 
 ```bash
-go run ./cmd/storm [flags]
+go run ./cmd/storm run [flags]
 ```
 
-| Flag       | Default                 | Description                          |
-| ---------- | ----------------------- | ------------------------------------ |
-| `-url`     | `https://hariomtanu.com` | Target URL                          |
-| `-n`       | `100`                    | Total number of requests             |
-| `-c`       | `10`                     | Concurrency level (parallel workers) |
-| `-method`  | `GET`                    | HTTP method: GET, POST, PUT, DELETE  |
-| `-timeout` | `10`                     | Request timeout in seconds           |
-| `-rate`    | `0`                      | Max requests per second (0 = unlimited) |
-| `-body`    | ``                       | Request body, e.g. `--body '{"name":"hariom"}'` |
-| `--format` | `text`                   | Output format: `text` or `json`      |
-| `--output` | ``                       | Write JSON report to a file          |
+| Flag         | Shorthand | Default                  | Description                          |
+| ------------ | --------- | ------------------------ | ------------------------------------ |
+| `--url`      | `-u`      | `https://hariomtanu.com` | Target URL                          |
+| `--requests` | `-n`      | `100`                    | Total number of requests             |
+| `--concurrency` | `-c`   | `10`                     | Concurrency level (parallel workers) |
+| `--method`   | `-m`      | `GET`                    | HTTP method: GET, POST, PUT, DELETE  |
+| `--timeout`  | `-t`      | `10`                     | Request timeout in seconds           |
+| `--rate`     | `-r`      | `0`                      | Max requests per second (0 = unlimited) |
+| `--body`     | `-b`      | ``                       | Request body, e.g. `-b '{"name":"hariom"}'` |
+| `--format`   |           | `text`                   | Output format: `text` or `json`      |
+| `--output`   |           | ``                       | Write JSON report to a file          |
 
 ### Examples
 
 Load test an API with 50 concurrent workers:
 
 ```bash
-go run ./cmd/storm -url https://api.example.com -n 1000 -c 50
+go run ./cmd/storm run -u https://api.example.com -n 1000 -c 50
 ```
 
 Send POST requests with a JSON payload:
 
 ```bash
-go run ./cmd/storm -url https://api.example.com/users -n 500 -c 20 -method POST -timeout 5
+go run ./cmd/storm run -u https://api.example.com/users -n 500 -c 20 -m POST -t 5
 ```
 
 Send POST with a custom body:
 
 ```bash
-go run ./cmd/storm -url https://api.example.com/users -n 500 -c 20 -method POST --body '{"name":"hariom","age":25}'
+go run ./cmd/storm run -u https://api.example.com/users -n 500 -c 20 -m POST -b '{"name":"hariom","age":25}'
 ```
 
 Throttle throughput to 500 requests per second:
 
 ```bash
-go run ./cmd/storm -url https://api.example.com -n 10000 -c 100 -rate 500
+go run ./cmd/storm run -u https://api.example.com -n 10000 -c 100 -r 500
 ```
 
 Export results as JSON for automation/CI:
 
 ```bash
-go run ./cmd/storm -url https://api.example.com -n 1000 -c 50 --format json --output report.json
+go run ./cmd/storm run -u https://api.example.com -n 1000 -c 50 --format json --output report.json
+```
+
+Pretty-print a saved report later:
+
+```bash
+go run ./cmd/storm report report.json
+```
+
+Build a single binary and use it directly:
+
+```bash
+make build
+./storm run -u https://api.example.com -n 1000 -c 50
 ```
 
 ## Sample Output
 
 ### Text format (default)
 
+During the run you get a live progress bar with real-time requests/sec:
+
 ```
+Starting Load Test
+Target: https://api.example.com
+Total: 1000 requests
+Concurrency: 50 workers
+Rate: 0 req/sec
+Running 100% |████████████████████████████████████████| (1000/1000) [1s:0s]
+512 req/s
+
 ============================================================
 LOAD TEST RESULTS
 ============================================================
@@ -146,16 +179,17 @@ Durations are in nanoseconds (`_ns`) so the output is unambiguous for machines.
 ```
 
 1. **Producer** (`produceJobs`) generates `TotalReqs` jobs. If a rate is set, a shared token-bucket limiter (`golang.org/x/time/rate`) throttles how fast jobs enter the channel.
-2. **Workers** (`worker`) — `Concurrency` goroutines — pull jobs, execute the HTTP request, and push results into a results channel.
+2. **Workers** (`worker`) — `Concurrency` goroutines — pull jobs, execute the HTTP request, and push results into a results channel. Each worker increments a shared atomic counter as it finishes a request.
 3. **Consumer** (`collectResults`) aggregates results into `Stats`.
 4. A **WaitGroup** ensures the results channel closes only after all workers finish.
-5. A shared **context** enables graceful cancellation — workers exit cleanly on `Ctrl+C`, and stats report only the requests actually sent.
-6. **Config validation** runs before the test starts (negative rate, zero concurrency, etc. are rejected).
+5. A **live progress bar** (text format only) polls the atomic counter every 500ms and shows real-time requests/sec — JSON output stays clean for machines.
+6. A shared **context** enables graceful cancellation — workers exit cleanly on `Ctrl+C`, and stats report only the requests actually sent.
+7. **Config validation** runs before the test starts (negative rate, zero concurrency, etc. are rejected).
 
 ## Concurrency & Rate Limiting Concepts
 
 - **Concurrency (`-c`)** — how many requests run in parallel (worker pool size).
-- **Rate (`-rate`)** — total throughput limit across all workers (requests/second).
+- **Rate (`-r`)** — total throughput limit across all workers (requests/second).
 - **Burst** — the token bucket capacity. With `burst = rate`, the first `rate` requests fire instantly, then the rate stays steady at `rate`/sec.
 
 ## Testing
@@ -174,14 +208,19 @@ go test ./... -race -v
 - `ConfigValidate` — invalid config rejected
 - `JSONReport` — JSON round-trip correctness
 - `Percentile` / `CollectResultsPercentiles` — p50/p95/p99 calculation
+- `CompletedCounter` — atomic live-progress counter tracks requests during and after a run
 
 ## Project Structure
 
 ```
 go-storm/
-├── cmd/storm/              # CLI entry point
+├── cmd/storm/              # CLI entry point (Cobra)
+│   ├── main.go             # root command
+│   ├── run.go              # storm run (load test + progress bar)
+│   ├── report.go           # storm report (pretty-print JSON)
+│   └── version.go          # storm version
 ├── internal/
-│   ├── config/             # CLI flags + config parsing
+│   ├── config/             # CLI flags → Config (Build)
 │   └── (tester, stats, ratelimit — planned splits)
 ├── pkg/storm/              # Core engine (public library API)
 │   ├── storm.go
@@ -210,7 +249,7 @@ Every push / pull request runs on GitHub Actions: formatting check, build, vet, 
 - [x] **Phase 1 — Core load tester**: concurrent workers, stats, graceful shutdown, tests + CI
 - [x] **Phase 2 — Rate limiting**: token-bucket rate control via `-rate`
 - [x] **Phase 3 — JSON report**: machine-readable output with `--format json` / `--output`
-- [ ] **Phase 4 — CLI with Cobra**: subcommands (`run`, `report`, `config`) and richer flags
+- [x] **Phase 4 — CLI with Cobra**: subcommands (`run`, `report`, `version`), rich flags, live progress bar
 - [ ] **Phase 5 — Redis**: distributed job queue, result aggregation, shared state
 - [ ] **Phase 6 — Distributed load testing**: run workers across multiple machines, coordinated via Redis
 - [ ] **Phase 7 — Prometheus/Grafana**: live metrics, dashboards, alerting
