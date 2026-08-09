@@ -29,12 +29,16 @@ func ParseFlags() Flags {
 	rate := flag.Int("rate", 0, "Max requests per second (0 = unlimited)")
 	format := flag.String("format", "text", "Output format: text or json")
 	output := flag.String("output", "", "Write report to a file")
+	body := flag.String("body", "", "Request body, e.g. --body '{\"name\":\"hariom\"}'")
 
 	flag.Parse()
 
 	var payload []byte
-	if *method == "POST" || *method == "PUT" {
-		payload = []byte(`{"test": "data"}`)
+	switch {
+	case *body != "":
+		payload = []byte(*body)
+	case *method == "POST" || *method == "PUT":
+		payload = []byte(`{"test":"data"}`)
 	}
 
 	return Flags{

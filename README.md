@@ -39,6 +39,7 @@ go run ./cmd/storm [flags]
 | `-method`  | `GET`                    | HTTP method: GET, POST, PUT, DELETE  |
 | `-timeout` | `10`                     | Request timeout in seconds           |
 | `-rate`    | `0`                      | Max requests per second (0 = unlimited) |
+| `-body`    | ``                       | Request body, e.g. `--body '{"name":"hariom"}'` |
 | `--format` | `text`                   | Output format: `text` or `json`      |
 | `--output` | ``                       | Write JSON report to a file          |
 
@@ -54,6 +55,12 @@ Send POST requests with a JSON payload:
 
 ```bash
 go run ./cmd/storm -url https://api.example.com/users -n 500 -c 20 -method POST -timeout 5
+```
+
+Send POST with a custom body:
+
+```bash
+go run ./cmd/storm -url https://api.example.com/users -n 500 -c 20 -method POST --body '{"name":"hariom","age":25}'
 ```
 
 Throttle throughput to 500 requests per second:
