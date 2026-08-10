@@ -1,5 +1,6 @@
 # Compiled binary
 /go-storm
+/storm
 *.exe
 
 # Test coverage output
