@@ -22,11 +22,21 @@ Built with classic Go concurrency patterns: **producer → rate-limited pipeline
 
 ## Quick Start
 
+Install once (needs Go 1.22+):
+
 ```bash
-go run ./cmd/storm run -u https://hariomtanu.com -n 100 -c 10
+go install github.com/hariomop12/go-storm/cmd/storm@latest
+```
+
+Then run anywhere:
+
+```bash
+storm run -u https://hariomtanu.com -n 100 -c 10
 ```
 
 Runs 100 requests against `https://hariomtanu.com` with 10 concurrent workers.
+
+No Go installed? Grab a prebuilt binary from the [Releases](https://github.com/hariomop12/go-storm/releases) page.
 
 ## Commands
 
@@ -348,8 +358,12 @@ Every push / pull request runs on GitHub Actions: formatting check, build, vet, 
 - [x] **Phase 5 — Redis**: distributed job queue, agent workers, centralized result aggregation
 - [x] **Phase 6 — Distributed enhancements**: per-agent registration + heartbeat, per-agent metrics breakdown, per-run result isolation
 - [ ] **Phase 7 — Job acknowledgment/retry**
-- [ ] **Phase 7 — Prometheus/Grafana**: live metrics, dashboards, alerting
+- [ ] **Phase 8 — Prometheus/Grafana**: live metrics, dashboards, alerting
 
 ## License
 
-MIT
+Released under the [MIT License](LICENSE).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) — tests, code style, and commit conventions.
