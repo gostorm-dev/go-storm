@@ -110,19 +110,21 @@ Prerequisite: a running Redis server (`docker run -d -p 6379:6379 redis`, or ins
 **1. Start agents** — on every machine you want to generate load from:
 
 ```bash
-./storm agent -c 5                 # 5 worker goroutines pulling from the queue
-./storm agent -c 3 --redis 10.0.0.5:6379   # pointing at a remote Redis
+./storm agent -c 5                          # 5 worker goroutines pulling from the queue
+./storm agent -c 3 --redis 10.0.0.5:6379    # pointing at a remote Redis
+./storm agent --name loadbox-1 -c 5         # name your agent for the per-agent breakdown
 ```
 
 **2. Run the distributed test** — once, from anywhere:
 
 ```bash
 ./storm run-dist -u https://api.example.com -n 10000
+./storm run-dist --agents 2 -n 10000        # wait until 2 agents are registered before starting
 ```
 
-The coordinator pushes 10,000 jobs to the queue, waits for all results, and prints the aggregated report. In this example the two agents (5 + 3 workers) would split the work automatically.
+The coordinator pushes 10,000 jobs to the queue, waits for all results, and prints the aggregated report plus a per-agent breakdown (which agent handled how many requests). In this example the two agents (5 + 3 workers) would split the work automatically.
 
-Redis keys: `storm:jobs` (job queue), `storm:results` (result list). The queue is flushed at the start of every `run-dist`.
+Redis keys: `storm:jobs` (job queue), `storm:agent:{id}` (per-agent heartbeat key with a TTL), `storm:results:{runID}` (per-run result list — a fresh key per `run-dist` so runs never mix). The queue is flushed at the start of every `run-dist`, and agents idle-exit after 5s with no jobs.
 
 ## Sample Output
 
@@ -163,8 +165,21 @@ Total Duration: 1.95s
 Status Code Distribution:
    200: 998 requests
    429: 2 requests
-============================================================
 ```
+
+### Distributed breakdown (`run-dist`)
+
+`run-dist` additionally prints how each agent contributed to the run:
+
+```
+AGENT BREAKDOWN
+------------------------------------------------------------
+Agent            Requests        Avg        p95    Success
+agent-a               100 4.147726ms   6.4086ms     100.0%
+agent-b               100 4.174609ms 6.947868ms     100.0%
+```
+
+Name agents with `storm agent --name <id>` so you can tell machines apart at a glance (default: `hostname-timestamp`).
 
 ### JSON format
 
@@ -237,23 +252,25 @@ The pipeline runs inside a single `LoadTester`, which owns everything it needs:
    | PushJobs      |  LPUSH |  storm:jobs  | BLPOP  | pop → Execute   |
    | (job queue)   | -----> |  (shared)    | <----- | → PushResult    |
    | poll results  |        +--------------+         |                |
-   | → Aggregate   |  LRANGE|  storm:results|  LPUSH | (any machines) |
-   +---------------+  <----  +--------------+  <----- +----------------+
+   | → Aggregate   |  LRANGE| storm:results:{runID}| LPUSH| (any machines) |
+   | + breakdown   |  <----  +--------------+  <----- +----------------+
+   +---------------+        | storm:agent:{id} |     | register + hb  |
 ```
 
 Two separate roles communicate **only through Redis** — they never talk to each other directly:
 
 **Coordinator (`storm run-dist`)**
-1. **Flush** — deletes `storm:jobs` and `storm:results` so leftovers from previous runs can't pollute the report.
-2. **PushJobs** — marshals every `Job` to JSON and `LPUSH`es them onto `storm:jobs` in chunks of 100 (so a million jobs don't hog memory in one command).
-3. **Poll** — every 300ms checks `LLEN storm:results`. When the count reaches `TotalReqs`, all jobs are done.
-4. **LRANGE** — pulls the whole result list, decodes each entry into a `Result`, and runs the exact same `storm.Aggregate` as local mode.
+1. **Flush** — deletes `storm:jobs` and every `storm:results:*` key so leftovers from previous runs can't pollute the report.
+2. **PushJobs** — marshals every `Job` (wrapped with the run's `runID`) to JSON and `LPUSH`es them onto `storm:jobs` in chunks of 100 (so a million jobs don't hog memory in one command).
+3. **Wait / Poll** — optionally blocks until `--agents` N are registered (30s timeout), then every 300ms checks `LLEN storm:results:{runID}`. When the count reaches `TotalReqs`, all jobs are done.
+4. **LRANGE** — pulls the run's result list, decodes each entry into a `Result`, and runs the exact same `storm.Aggregate` as local mode — then groups results per agent for the breakdown.
 
 **Agent (`storm agent`)**
-1. Starts `-c` worker goroutines, each with its own `http.Client`.
-2. Each worker calls `BLPop` on `storm:jobs` — a **blocking** pop that returns instantly when a job appears and wastes no CPU when the queue is empty (no polling).
-3. Executes the job with the shared `storm.Execute`, pushes the result back with `LPUSH storm:results`.
-4. Exits after ~5s with no jobs, or immediately on `Ctrl+C`.
+1. **Register + heartbeat** — writes `storm:agent:{id}` with a 5s TTL, then a goroutine renews it every second. A crashed agent's key just expires; `--agents` coordination sees only live agents.
+2. Starts `-c` worker goroutines, each with its own `http.Client`.
+3. Each worker calls `BLPop` on `storm:jobs` — a **blocking** pop that returns instantly when a job appears and wastes no CPU when the queue is empty (no polling).
+4. Executes the job with the shared `storm.Execute`, pushes the result (tagged with the agent ID) to `LPUSH storm:results:{runID}`.
+5. Exits after ~5s with no jobs, or immediately on `Ctrl+C` (unregistering itself).
 
 **Why Redis?** The queue is the **single source of truth** shared by every machine. A coordinator pushes jobs once; *any* number of agents pull from the same queue, so the work is split automatically and workers on one machine can't see another machine's state. Results all land in one list, so aggregation is trivial. Redis is fast (in-memory), simple (atomic `BLPop`), and its lists are durable enough that jobs survive an agent crash — the job just waits for the next pull.
 
@@ -329,7 +346,8 @@ Every push / pull request runs on GitHub Actions: formatting check, build, vet, 
 - [x] **Phase 3 — JSON report**: machine-readable output with `--format json` / `--output`
 - [x] **Phase 4 — CLI with Cobra**: subcommands (`run`, `report`, `version`), rich flags, live progress bar
 - [x] **Phase 5 — Redis**: distributed job queue, agent workers, centralized result aggregation
-- [ ] **Phase 6 — Distributed enhancements**: per-agent registration, live per-agent metrics, job acknowledgment/retry
+- [x] **Phase 6 — Distributed enhancements**: per-agent registration + heartbeat, per-agent metrics breakdown, per-run result isolation
+- [ ] **Phase 7 — Job acknowledgment/retry**
 - [ ] **Phase 7 — Prometheus/Grafana**: live metrics, dashboards, alerting
 
 ## License
