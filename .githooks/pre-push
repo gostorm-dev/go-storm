@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+echo "==> gofmt check"
+test -z "$(gofmt -l .)"
+echo "==> go vet"
+go vet ./...
+echo "==> go test -race"
+go test ./... -race -count=1
+echo "==> All checks passed"

@@ -3,6 +3,10 @@
 /storm
 *.exe
 
+# Release build output (CI builds and attaches these)
+/dist/
+/release/
+
 # Test coverage output
 coverage.out
 
