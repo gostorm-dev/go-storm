@@ -147,13 +147,16 @@ func (lt *LoadTester) Completed() int64 {
 
 // executeRequest performs a single HTTP request and records its result.
 func (lt *LoadTester) executeRequest(job Job) Result {
+	return Execute(lt.ctx, lt.client, job)
+}
+
+// Execute performs a single HTTP request and records its result.
+// Exported so distributed agents can reuse the same request logic.
+func Execute(ctx context.Context, client *http.Client, job Job) Result {
 	start := time.Now()
 
-	var req *http.Request
-	var err error
-
-	req, err = http.NewRequestWithContext(
-		lt.ctx,
+	req, err := http.NewRequestWithContext(
+		ctx,
 		job.Method,
 		job.URL,
 		bytes.NewBuffer(job.Body),
@@ -172,7 +175,7 @@ func (lt *LoadTester) executeRequest(job Job) Result {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := lt.client.Do(req)
+	resp, err := client.Do(req)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -223,6 +226,19 @@ func (lt *LoadTester) produceJobs() {
 
 // collectResults consumes the results channel and aggregates Stats.
 func (lt *LoadTester) collectResults() {
+	var results []Result
+	for result := range lt.results {
+		results = append(results, result)
+	}
+
+	lt.statsMu.Lock()
+	lt.stats = Aggregate(results)
+	lt.statsMu.Unlock()
+}
+
+// Aggregate combines a set of results into Stats.
+// Exported so distributed coordinators can reuse the same aggregation logic.
+func Aggregate(results []Result) Stats {
 	var (
 		totalDuration time.Duration
 		minDuration   time.Duration
@@ -231,14 +247,12 @@ func (lt *LoadTester) collectResults() {
 		failCount     int
 		statusCodes   = make(map[int]int)
 		errors        []string
-		duration      []time.Duration
+		durations     []time.Duration
 	)
 
 	firstResult := true
-	resultsReceived := 0
 
-	for result := range lt.results {
-		resultsReceived++
+	for _, result := range results {
 		if result.Error != nil {
 			failCount++
 
@@ -257,7 +271,7 @@ func (lt *LoadTester) collectResults() {
 		}
 
 		totalDuration += result.Duration
-		duration = append(duration, result.Duration)
+		durations = append(durations, result.Duration)
 
 		if firstResult {
 			minDuration = result.Duration
@@ -280,27 +294,23 @@ func (lt *LoadTester) collectResults() {
 		avgDuration = totalDuration / time.Duration(successCount+failCount)
 	}
 
-	lt.statsMu.Lock()
-	sort.Slice(duration, func(i, j int) bool {
-		return duration[i] < duration[j]
+	sort.Slice(durations, func(i, j int) bool {
+		return durations[i] < durations[j]
 	})
 
-	lt.stats = Stats{
-		TotalRequests:   resultsReceived,
+	return Stats{
+		TotalRequests:   len(results),
 		Successful:      successCount,
 		Failed:          failCount,
 		MinResponseTime: minDuration,
 		MaxResponseTime: maxDuration,
 		AvgResponseTime: avgDuration,
-		P50:             percentile(duration, 50),
-		P95:             percentile(duration, 95),
-		P99:             percentile(duration, 99),
-
-		StatusCodes: statusCodes,
-		Errors:      errors,
+		P50:             percentile(durations, 50),
+		P95:             percentile(durations, 95),
+		P99:             percentile(durations, 99),
+		StatusCodes:     statusCodes,
+		Errors:          errors,
 	}
-
-	lt.statsMu.Unlock()
 }
 
 // percentile returns the duration at the given percentile (0-100)
@@ -363,14 +373,20 @@ func (lt *LoadTester) Run() (Stats, error) {
 
 // PrintStats renders the aggregated results to stdout.
 func (lt *LoadTester) PrintStats() {
-	stats := lt.stats
+	PrintStatsReport(lt.config, lt.stats)
+}
 
+// PrintStatsReport renders a run's stats to stdout.
+// Exported so distributed coordinators can reuse the same output.
+func PrintStatsReport(config Config, stats Stats) {
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("LOAD TEST RESULTS")
 	fmt.Println(strings.Repeat("=", 60))
-	fmt.Printf("URL: %s\n", lt.config.URL)
-	fmt.Printf("Method: %s\n", lt.config.Method)
-	fmt.Printf("Concurrency: %d\n", lt.config.Concurrency)
+	fmt.Printf("URL: %s\n", config.URL)
+	fmt.Printf("Method: %s\n", config.Method)
+	if config.Concurrency > 0 {
+		fmt.Printf("Concurrency: %d\n", config.Concurrency)
+	}
 	fmt.Printf("Total Requests: %d\n", stats.TotalRequests)
 	fmt.Println(strings.Repeat("-", 60))
 	fmt.Printf("Successful: %d\n", stats.Successful)
@@ -425,17 +441,21 @@ type Report struct {
 
 // JSONReport serializes the run results as indented JSON.
 func (lt *LoadTester) JSONReport() ([]byte, error) {
-	stats := lt.stats
+	return ReportJSON(lt.config, lt.stats)
+}
 
+// ReportJSON serializes a run's stats as indented JSON.
+// Exported so distributed coordinators can reuse the same output.
+func ReportJSON(config Config, stats Stats) ([]byte, error) {
 	successRate := 0.0
 	if stats.TotalRequests > 0 {
 		successRate = float64(stats.Successful) / float64(stats.TotalRequests) * 100
 	}
 	report := Report{
-		URL:             lt.config.URL,
-		Method:          lt.config.Method,
-		Concurrency:     lt.config.Concurrency,
-		Rate:            lt.config.Rate,
+		URL:             config.URL,
+		Method:          config.Method,
+		Concurrency:     config.Concurrency,
+		Rate:            config.Rate,
 		TotalRequests:   stats.TotalRequests,
 		Successful:      stats.Successful,
 		Failed:          stats.Failed,

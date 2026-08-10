@@ -18,6 +18,7 @@ Built with classic Go concurrency patterns: **producer → rate-limited pipeline
 - Graceful shutdown on `Ctrl+C` (SIGINT / SIGTERM)
 - Panic-safe and race-free result aggregation
 - Config validation before every run
+- **Distributed load testing** via Redis (`storm run-dist` + `storm agent`): agents on any machine share one job queue and push results back for centralized aggregation
 
 ## Quick Start
 
@@ -31,6 +32,8 @@ Runs 100 requests against `https://hariomtanu.com` with 10 concurrent workers.
 
 ```bash
 go run ./cmd/storm run [flags]      # run a load test
+go run ./cmd/storm run-dist [flags] # run a distributed load test (needs Redis)
+go run ./cmd/storm agent [flags]    # worker that pulls jobs from Redis
 go run ./cmd/storm report <file>    # pretty-print a saved JSON report
 go run ./cmd/storm version          # print the version
 ```
@@ -97,6 +100,29 @@ Build a single binary and use it directly:
 make build
 ./storm run -u https://api.example.com -n 1000 -c 50
 ```
+
+## Distributed Load Testing (Redis)
+
+`storm run-dist` + `storm agent` distribute load across any number of machines. Agents pull jobs from a shared Redis queue, execute them, and push results back; the coordinator aggregates everything into the same report format as local runs.
+
+Prerequisite: a running Redis server (`docker run -d -p 6379:6379 redis`, or install `redis-server`).
+
+**1. Start agents** — on every machine you want to generate load from:
+
+```bash
+./storm agent -c 5                 # 5 worker goroutines pulling from the queue
+./storm agent -c 3 --redis 10.0.0.5:6379   # pointing at a remote Redis
+```
+
+**2. Run the distributed test** — once, from anywhere:
+
+```bash
+./storm run-dist -u https://api.example.com -n 10000
+```
+
+The coordinator pushes 10,000 jobs to the queue, waits for all results, and prints the aggregated report. In this example the two agents (5 + 3 workers) would split the work automatically.
+
+Redis keys: `storm:jobs` (job queue), `storm:results` (result list). The queue is flushed at the start of every `run-dist`.
 
 ## Sample Output
 
@@ -168,23 +194,72 @@ Status Code Distribution:
 
 Durations are in nanoseconds (`_ns`) so the output is unambiguous for machines.
 
-## How It Works
+## Architecture
+
+### Local mode — producer → worker pool → consumer
 
 ```
           +------------------+     +----------------------+     +----------------+
           |   Producer       |     |   Worker Pool (N)    |     |    Consumer    |
   Config  |  produceJobs     | --> |  goroutines (jobs)   | --> | collectResults |
-          |   + rate limiter |     |  execute HTTP reqs   |     | + JSONReport   |
+          |   + rate limiter |     |  execute HTTP reqs   |     |  → Aggregate   |
           +------------------+     +----------------------+     +----------------+
 ```
 
-1. **Producer** (`produceJobs`) generates `TotalReqs` jobs. If a rate is set, a shared token-bucket limiter (`golang.org/x/time/rate`) throttles how fast jobs enter the channel.
-2. **Workers** (`worker`) — `Concurrency` goroutines — pull jobs, execute the HTTP request, and push results into a results channel. Each worker increments a shared atomic counter as it finishes a request.
-3. **Consumer** (`collectResults`) aggregates results into `Stats`.
-4. A **WaitGroup** ensures the results channel closes only after all workers finish.
-5. A **live progress bar** (text format only) polls the atomic counter every 500ms and shows real-time requests/sec — JSON output stays clean for machines.
-6. A shared **context** enables graceful cancellation — workers exit cleanly on `Ctrl+C`, and stats report only the requests actually sent.
-7. **Config validation** runs before the test starts (negative rate, zero concurrency, etc. are rejected).
+The pipeline runs inside a single `LoadTester`, which owns everything it needs:
+
+| Component | Responsibility |
+| --------- | -------------- |
+| `ctx` / `cancel` | a cancellable `context` — `Ctrl+C` shuts workers down gracefully |
+| `client` | one shared `http.Client` with the configured per-request timeout |
+| `jobs chan Job` | buffered channel of size `TotalReqs` — producer and workers never block on send |
+| `results chan Result` | buffered channel of size `TotalReqs` — workers push results here |
+| `wg sync.WaitGroup` | counts running workers so results can be closed exactly once |
+| `limiter *rate.Limiter` | shared token bucket (`golang.org/x/time/rate`), created only if `rate > 0` |
+| `completed atomic.Int64` | live request counter read by the progress bar |
+
+**Step by step:**
+
+1. **Producer** (`produceJobs`) loops `TotalReqs` times, building one `Job` per request. Before each job it calls `limiter.Wait(ctx)` when a rate is set — this is what throttles throughput. Jobs land on the buffered `jobs` channel, then the producer closes the channel.
+2. **Workers** (`worker`) — `Concurrency` goroutines — `select` on `ctx.Done()` and the `jobs` channel. Each takes a `Job`, executes the HTTP request via `Execute`, bumps the `completed` counter, and sends the `Result` to `results`. Every worker also watches the context, so cancellation exits cleanly instead of deadlocking.
+3. **Completion** — the consumer waits for the `WaitGroup`, and only then closes `results`. This guarantees the channel closes after (and only after) every worker finishes.
+4. **Consumer** (`collectResults`) reads all `Result`s and hands them to `Aggregate`, which computes counts, status-code distribution, min/max/avg latency, and p50/p95/p99 (nearest-rank method).
+5. **Final metrics** — `Run` times the whole test, then sets `TotalDuration` and `RequestsPerSec` on the stats.
+6. **Live progress** — while running, a board-watcher goroutine reads `completed` every 500ms, computes real-time req/s from the delta, and updates the progress bar (text output only, so JSON stays clean).
+
+**Why channels + WaitGroup?** Channels give each component an explicit, race-free hand-off point; the WaitGroup makes "all workers done" a first-class event. This is the idiomatic Go pipeline — the same shape used by real systems (e.g. log processors, image pipelines).
+
+### Distributed mode — coordinator + agents + Redis
+
+```
+   storm run-dist               Redis                     storm agent × N
+   +---------------+        +--------------+         +----------------+
+   | PushJobs      |  LPUSH |  storm:jobs  | BLPOP  | pop → Execute   |
+   | (job queue)   | -----> |  (shared)    | <----- | → PushResult    |
+   | poll results  |        +--------------+         |                |
+   | → Aggregate   |  LRANGE|  storm:results|  LPUSH | (any machines) |
+   +---------------+  <----  +--------------+  <----- +----------------+
+```
+
+Two separate roles communicate **only through Redis** — they never talk to each other directly:
+
+**Coordinator (`storm run-dist`)**
+1. **Flush** — deletes `storm:jobs` and `storm:results` so leftovers from previous runs can't pollute the report.
+2. **PushJobs** — marshals every `Job` to JSON and `LPUSH`es them onto `storm:jobs` in chunks of 100 (so a million jobs don't hog memory in one command).
+3. **Poll** — every 300ms checks `LLEN storm:results`. When the count reaches `TotalReqs`, all jobs are done.
+4. **LRANGE** — pulls the whole result list, decodes each entry into a `Result`, and runs the exact same `storm.Aggregate` as local mode.
+
+**Agent (`storm agent`)**
+1. Starts `-c` worker goroutines, each with its own `http.Client`.
+2. Each worker calls `BLPop` on `storm:jobs` — a **blocking** pop that returns instantly when a job appears and wastes no CPU when the queue is empty (no polling).
+3. Executes the job with the shared `storm.Execute`, pushes the result back with `LPUSH storm:results`.
+4. Exits after ~5s with no jobs, or immediately on `Ctrl+C`.
+
+**Why Redis?** The queue is the **single source of truth** shared by every machine. A coordinator pushes jobs once; *any* number of agents pull from the same queue, so the work is split automatically and workers on one machine can't see another machine's state. Results all land in one list, so aggregation is trivial. Redis is fast (in-memory), simple (atomic `BLPop`), and its lists are durable enough that jobs survive an agent crash — the job just waits for the next pull.
+
+**The `distResult` wire format** — results are serialized as a small struct where the error is a `string`. A Go `error` interface can't be JSON-marshaled, so the error message is converted to text at the agent and back to an `error` at the coordinator.
+
+**One code path for reports** — local and distributed runs share `Execute`, `Aggregate`, `PrintStatsReport`, and `ReportJSON`. That's why a distributed report looks byte-for-byte like a local one, and bug fixes in aggregation apply everywhere automatically.
 
 ## Concurrency & Rate Limiting Concepts
 
@@ -215,12 +290,15 @@ go test ./... -race -v
 ```
 go-storm/
 ├── cmd/storm/              # CLI entry point (Cobra)
-│   ├── main.go             # root command
-│   ├── run.go              # storm run (load test + progress bar)
+│   ├── main.go             # root command + --redis flag
+│   ├── run.go              # storm run (local load test + progress bar)
+│   ├── run_dist.go         # storm run-dist (distributed coordinator)
+│   ├── agent.go            # storm agent (distributed worker)
 │   ├── report.go           # storm report (pretty-print JSON)
 │   └── version.go          # storm version
 ├── internal/
 │   ├── config/             # CLI flags → Config (Build)
+│   ├── dist/               # distributed engine (Redis queue, agent, coordinator)
 │   └── (tester, stats, ratelimit — planned splits)
 ├── pkg/storm/              # Core engine (public library API)
 │   ├── storm.go
@@ -250,8 +328,8 @@ Every push / pull request runs on GitHub Actions: formatting check, build, vet, 
 - [x] **Phase 2 — Rate limiting**: token-bucket rate control via `-rate`
 - [x] **Phase 3 — JSON report**: machine-readable output with `--format json` / `--output`
 - [x] **Phase 4 — CLI with Cobra**: subcommands (`run`, `report`, `version`), rich flags, live progress bar
-- [ ] **Phase 5 — Redis**: distributed job queue, result aggregation, shared state
-- [ ] **Phase 6 — Distributed load testing**: run workers across multiple machines, coordinated via Redis
+- [x] **Phase 5 — Redis**: distributed job queue, agent workers, centralized result aggregation
+- [ ] **Phase 6 — Distributed enhancements**: per-agent registration, live per-agent metrics, job acknowledgment/retry
 - [ ] **Phase 7 — Prometheus/Grafana**: live metrics, dashboards, alerting
 
 ## License
