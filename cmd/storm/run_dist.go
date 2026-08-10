@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/hariomop12/go-storm/internal/dist"
 	"github.com/hariomop12/go-storm/pkg/storm"
 )
+
+var waitAgents int
 
 var runDistCmd = &cobra.Command{
 	Use:   "run-dist",
@@ -50,7 +53,10 @@ then run this command once.`,
 		color.Cyan("Distributed Load Test")
 		fmt.Printf("Target: %s\n", cfg.URL)
 		fmt.Printf("Total: %d requests\n", total)
-		fmt.Printf("Queue: %s\n\n", redisAddr)
+		fmt.Printf("Queue: %s\n", redisAddr)
+		if waitAgents > 0 {
+			color.Yellow("Waiting for %d agents...", waitAgents)
+		}
 
 		jobs := make([]storm.Job, total)
 		for i := range jobs {
@@ -63,6 +69,7 @@ then run this command once.`,
 		}
 
 		// Live result counter (text output only).
+		runID := dist.NewRunID()
 		var done chan struct{}
 		if format == "text" {
 			done = make(chan struct{})
@@ -74,7 +81,7 @@ then run this command once.`,
 					case <-done:
 						return
 					case <-ticker.C:
-						n, err := rdb.ResultsCount(ctx)
+						n, err := rdb.ResultsCount(ctx, runID)
 						if err == nil {
 							fmt.Printf("\rResults: %d/%d", n, total)
 						}
@@ -83,7 +90,7 @@ then run this command once.`,
 			}()
 		}
 
-		stats, err := rdb.RunCoordinator(ctx, jobs)
+		stats, breakdown, err := rdb.RunCoordinator(ctx, runID, jobs, waitAgents)
 		if done != nil {
 			close(done)
 			fmt.Println()
@@ -92,7 +99,6 @@ then run this command once.`,
 			return err
 		}
 
-		// Final output in the same formats as local runs.
 		if format == "json" {
 			data, err := storm.ReportJSON(cfg, stats)
 			if err != nil {
@@ -107,9 +113,37 @@ then run this command once.`,
 			fmt.Println(string(data))
 			return nil
 		}
+
+		printAgentBreakdown(breakdown)
 		storm.PrintStatsReport(cfg, stats)
 		return nil
 	},
+}
+
+// printAgentBreakdown renders each agent's share of the run.
+func printAgentBreakdown(breakdown []dist.AgentStats) {
+	if len(breakdown) == 0 {
+		return
+	}
+
+	fmt.Println("\n" + strings.Repeat("-", 60))
+	fmt.Println("AGENT BREAKDOWN")
+	fmt.Println(strings.Repeat("-", 60))
+	fmt.Printf("%-16s %8s %10s %10s %10s\n", "Agent", "Requests", "Avg", "p95", "Success")
+	for _, a := range breakdown {
+		rate := 0.0
+		if a.Stats.TotalRequests > 0 {
+			rate = float64(a.Stats.Successful) / float64(a.Stats.TotalRequests) * 100
+		}
+		fmt.Printf("%-16s %8d %10v %10v %9.1f%%\n",
+			a.Agent.ID,
+			a.Stats.TotalRequests,
+			a.Stats.AvgResponseTime,
+			a.Stats.P95,
+			rate,
+		)
+	}
+	fmt.Println(strings.Repeat("-", 60))
 }
 
 func init() {
@@ -118,6 +152,7 @@ func init() {
 	runDistCmd.Flags().StringVarP(&method, "method", "m", "GET", "HTTP method: GET, POST, PUT, DELETE")
 	runDistCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "Request timeout in seconds")
 	runDistCmd.Flags().StringVarP(&body, "body", "b", "", "Request body (for POST/PUT)")
+	runDistCmd.Flags().IntVar(&waitAgents, "agents", 0, "Wait for this many agents before starting (0 = don't wait)")
 	runDistCmd.Flags().StringVar(&format, "format", "text", "Output format: text or json")
 	runDistCmd.Flags().StringVar(&output, "output", "", "Write JSON report to a file")
 }
