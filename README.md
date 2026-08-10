@@ -193,21 +193,21 @@ Name agents with `storm agent --name <id>` so you can tell machines apart at a g
   "successful": 10000,
   "failed": 0,
   "success_rate": 100,
-  "min_response_time_ns": 1096309,
-  "max_response_time_ns": 206533112,
-  "avg_response_time_ns": 7362558,
-  "p50_ns": 4200000,
-  "p95_ns": 18100000,
-  "p99_ns": 95300000,
+  "min_response_time_ms": 1,
+  "max_response_time_ms": 207,
+  "avg_response_time_ms": 7,
+  "p50_ms": 4,
+  "p95_ms": 18,
+  "p99_ms": 95,
   "requests_per_sec": 526.13,
-  "total_duration_ns": 19006763064,
+  "total_duration_ms": 19007,
   "status_codes": {
     "200": 10000
   }
 }
 ```
 
-Durations are in nanoseconds (`_ns`) so the output is unambiguous for machines.
+Durations are in milliseconds (`_ms`) — easy to read for humans and machines alike.
 
 ## Architecture
 

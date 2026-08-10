@@ -419,24 +419,24 @@ func PrintStatsReport(config Config, stats Stats) {
 
 // Report combines run metadata with results for machine-readable output.
 type Report struct {
-	URL             string        `json:"url"`
-	Method          string        `json:"method"`
-	Concurrency     int           `json:"concurrency"`
-	Rate            int           `json:"rate"`
-	TotalRequests   int           `json:"total_requests"`
-	Successful      int           `json:"successful"`
-	Failed          int           `json:"failed"`
-	SuccessRate     float64       `json:"success_rate"`
-	MinResponseTime time.Duration `json:"min_response_time_ns"`
-	MaxResponseTime time.Duration `json:"max_response_time_ns"`
-	AvgResponseTime time.Duration `json:"avg_response_time_ns"`
-	P50             time.Duration `json:"p50_ns"`
-	P95             time.Duration `json:"p95_ns"`
-	P99             time.Duration `json:"p99_ns"`
-	RequestsPerSec  float64       `json:"requests_per_sec"`
-	TotalDuration   time.Duration `json:"total_duration_ns"`
-	StatusCodes     map[int]int   `json:"status_codes"`
-	Errors          []string      `json:"errors,omitempty"`
+	URL             string      `json:"url"`
+	Method          string      `json:"method"`
+	Concurrency     int         `json:"concurrency"`
+	Rate            int         `json:"rate"`
+	TotalRequests   int         `json:"total_requests"`
+	Successful      int         `json:"successful"`
+	Failed          int         `json:"failed"`
+	SuccessRate     float64     `json:"success_rate"`
+	MinResponseTime int64       `json:"min_response_time_ms"`
+	MaxResponseTime int64       `json:"max_response_time_ms"`
+	AvgResponseTime int64       `json:"avg_response_time_ms"`
+	P50             int64       `json:"p50_ms"`
+	P95             int64       `json:"p95_ms"`
+	P99             int64       `json:"p99_ms"`
+	RequestsPerSec  float64     `json:"requests_per_sec"`
+	TotalDuration   int64       `json:"total_duration_ms"`
+	StatusCodes     map[int]int `json:"status_codes"`
+	Errors          []string    `json:"errors,omitempty"`
 }
 
 // JSONReport serializes the run results as indented JSON.
@@ -460,14 +460,14 @@ func ReportJSON(config Config, stats Stats) ([]byte, error) {
 		Successful:      stats.Successful,
 		Failed:          stats.Failed,
 		SuccessRate:     successRate,
-		MinResponseTime: stats.MinResponseTime,
-		MaxResponseTime: stats.MaxResponseTime,
-		AvgResponseTime: stats.AvgResponseTime,
-		P50:             stats.P50,
-		P95:             stats.P95,
-		P99:             stats.P99,
+		MinResponseTime: stats.MinResponseTime.Milliseconds(),
+		MaxResponseTime: stats.MaxResponseTime.Milliseconds(),
+		AvgResponseTime: stats.AvgResponseTime.Milliseconds(),
+		P50:             stats.P50.Milliseconds(),
+		P95:             stats.P95.Milliseconds(),
+		P99:             stats.P99.Milliseconds(),
 		RequestsPerSec:  stats.RequestsPerSec,
-		TotalDuration:   stats.TotalDuration,
+		TotalDuration:   stats.TotalDuration.Milliseconds(),
 		StatusCodes:     stats.StatusCodes,
 		Errors:          stats.Errors,
 	}
