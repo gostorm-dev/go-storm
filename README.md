@@ -169,6 +169,12 @@ Then start agents with `--metrics-port` + `--stay-alive` and load-test away:
 
 Open `http://localhost:3000` (login `admin`/`admin`) → **Dashboards → Storm Load Test**. The datasource and dashboard are provisioned automatically.
 
+**Live view during a 10k-request run:**
+
+![Requests per second](docs/metrics-reqs-per-sec.png)
+
+![Latency percentiles (p50 / p95 / p99)](docs/metrics-latency-percentiles.png)
+
 > **Note:** Prometheus and Grafana must run with `--network host` (or point their datasource at a host-reachable address). Inside a container, `localhost` refers to the container itself — agents exposed on the host won't be reachable via `localhost` from a bridged container.
 
 ## Sample Output
