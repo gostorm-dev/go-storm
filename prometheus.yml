@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: storm
+    static_configs:
+      - targets: ['localhost:9091', 'localhost:9092']

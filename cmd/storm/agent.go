@@ -2,22 +2,27 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/spf13/cobra"
-
 	"github.com/hariomop12/go-storm/internal/dist"
+	"github.com/hariomop12/go-storm/internal/metrics"
+	"github.com/hariomop12/go-storm/pkg/storm"
+	"github.com/spf13/cobra"
 )
 
 var (
 	agentName        string
 	agentConcurrency int
 	agentTimeout     int
+	agentMetricsPort int
+	agentStayAlive   bool
 )
 
 var agentCmd = &cobra.Command{
@@ -39,11 +44,30 @@ all with a single 'storm run-dist' command.`,
 			return fmt.Errorf("cannot connect to redis at %s: %w", redisAddr, err)
 		}
 
+		if agentMetricsPort > 0 {
+			metricsServer := &http.Server{
+				Addr:    fmt.Sprintf(":%d", agentMetricsPort),
+				Handler: metrics.Handler(),
+			}
+			go func() {
+				fmt.Printf("Metrics: http://localhost:%d/metrics\n", agentMetricsPort)
+				if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					fmt.Fprintf(os.Stderr, "metrics server: %v\n", err)
+				}
+			}()
+			defer metricsServer.Shutdown(context.Background())
+		}
+
 		color.Green("Agent %s started (connected to %s)", id, redisAddr)
 		fmt.Printf("Workers: %d\n", agentConcurrency)
 		fmt.Printf("Idle exit after 5s with no jobs (Ctrl+C to stop)\n")
 
-		processed, err := rdb.RunAgent(ctx, id, agentConcurrency, time.Duration(agentTimeout)*time.Second)
+		processed, err := rdb.RunAgent(ctx, id, agentConcurrency,
+			time.Duration(agentTimeout)*time.Second,
+			agentStayAlive,
+			func(storm.Job) { metrics.RequestStart() },
+			metrics.Record,
+		)
 		if err != nil {
 			return err
 		}
@@ -68,4 +92,6 @@ func init() {
 	agentCmd.Flags().StringVar(&agentName, "name", "", "Agent name (default: hostname-timestamp)")
 	agentCmd.Flags().IntVarP(&agentConcurrency, "concurrency", "c", 5, "Agent worker goroutines")
 	agentCmd.Flags().IntVarP(&agentTimeout, "timeout", "t", 10, "Request timeout in seconds")
+	agentCmd.Flags().IntVar(&agentMetricsPort, "metrics-port", 9091, "Prometheus /metrics port (0 = disabled)")
+	agentCmd.Flags().BoolVar(&agentStayAlive, "stay-alive", false, "Keep running after the queue empties (for metrics)")
 }

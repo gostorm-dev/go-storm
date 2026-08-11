@@ -123,6 +123,7 @@ Prerequisite: a running Redis server (`docker run -d -p 6379:6379 redis`, or ins
 ./storm agent -c 5                          # 5 worker goroutines pulling from the queue
 ./storm agent -c 3 --redis 10.0.0.5:6379    # pointing at a remote Redis
 ./storm agent --name loadbox-1 -c 5         # name your agent for the per-agent breakdown
+./storm agent --metrics-port 9091 --stay-alive  # expose /metrics, keep running for scraping
 ```
 
 **2. Run the distributed test** — once, from anywhere:
@@ -135,6 +136,40 @@ Prerequisite: a running Redis server (`docker run -d -p 6379:6379 redis`, or ins
 The coordinator pushes 10,000 jobs to the queue, waits for all results, and prints the aggregated report plus a per-agent breakdown (which agent handled how many requests). In this example the two agents (5 + 3 workers) would split the work automatically.
 
 Redis keys: `storm:jobs` (job queue), `storm:agent:{id}` (per-agent heartbeat key with a TTL), `storm:results:{runID}` (per-run result list — a fresh key per `run-dist` so runs never mix). The queue is flushed at the start of every `run-dist`, and agents idle-exit after 5s with no jobs.
+
+## Live Metrics (Prometheus + Grafana)
+
+Agents expose a `/metrics` endpoint so you can watch a load test live on a Grafana dashboard. The exposed metrics follow the **RED method** (Rate, Errors, Duration):
+
+- `storm_requests_total{method, status}` — counter of every request, labeled by HTTP method and status code
+- `storm_inflight_requests` — gauge of requests currently running
+- `storm_request_duration_seconds` — histogram of request latency (p50/p95/p99 via `histogram_quantile`)
+
+**Start** Prometheus + Grafana (files are in the `grafana/` folder):
+
+```bash
+docker run -d --name prometheus --network host \
+  -v "$PWD/prometheus.yml:/etc/prometheus/prometheus.yml:ro" prom/prometheus
+
+docker run -d --name grafana --network host \
+  -e GF_SECURITY_ADMIN_PASSWORD=admin \
+  -v "$PWD/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources" \
+  -v "$PWD/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards" \
+  -v "$PWD/grafana/dashboards:/var/lib/grafana/dashboards" \
+  grafana/grafana
+```
+
+Then start agents with `--metrics-port` + `--stay-alive` and load-test away:
+
+```bash
+./storm agent --name a --metrics-port 9091 --stay-alive &
+./storm agent --name b --metrics-port 9092 --stay-alive &
+./storm run-dist -u https://api.example.com -n 10000 --agents 2
+```
+
+Open `http://localhost:3000` (login `admin`/`admin`) → **Dashboards → Storm Load Test**. The datasource and dashboard are provisioned automatically.
+
+> **Note:** Prometheus and Grafana must run with `--network host` (or point their datasource at a host-reachable address). Inside a container, `localhost` refers to the container itself — agents exposed on the host won't be reachable via `localhost` from a bridged container.
 
 ## Sample Output
 
@@ -358,7 +393,7 @@ Every push / pull request runs on GitHub Actions: formatting check, build, vet, 
 - [x] **Phase 5 — Redis**: distributed job queue, agent workers, centralized result aggregation
 - [x] **Phase 6 — Distributed enhancements**: per-agent registration + heartbeat, per-agent metrics breakdown, per-run result isolation
 - [ ] **Phase 7 — Job acknowledgment/retry**
-- [ ] **Phase 8 — Prometheus/Grafana**: live metrics, dashboards, alerting
+- [x] **Phase 8 — Prometheus/Grafana**: live metrics, dashboards, alerting
 
 ## License
 

@@ -220,7 +220,8 @@ func (r *Redis) ResultsCount(ctx context.Context, runID string) (int64, error) {
 // results back tagged with the agent id. It registers + heartbeats so the
 // coordinator can see it, and returns when the context is cancelled or no
 // jobs arrive for idleTimeout.
-func (r *Redis) RunAgent(ctx context.Context, id string, workers int, requestTimeout time.Duration) (int, error) {
+func (r *Redis) RunAgent(ctx context.Context, id string, workers int, requestTimeout time.Duration,
+	stayAlive bool, onJobStart func(storm.Job), onResult func(storm.Result)) (int, error) {
 	if err := r.RegisterAgent(ctx, id); err != nil {
 		return 0, err
 	}
@@ -268,7 +269,12 @@ func (r *Redis) RunAgent(ctx context.Context, id string, workers int, requestTim
 				}
 
 				if !ok {
-					// Queue empty: leave after a short idle window.
+					// Queue empty: leave after a short idle window, unless
+					// stay-alive keeps the agent up for metrics scraping.
+					if stayAlive {
+						time.Sleep(100 * time.Millisecond)
+						continue
+					}
 					if time.Since(lastJobAt) > idleTimeout {
 						return
 					}
@@ -276,7 +282,13 @@ func (r *Redis) RunAgent(ctx context.Context, id string, workers int, requestTim
 				}
 
 				lastJobAt = time.Now()
+				if onJobStart != nil {
+					onJobStart(job)
+				}
 				result := storm.Execute(ctx, client, job)
+				if onResult != nil {
+					onResult(result)
+				}
 				if err := r.PushResult(ctx, runID, id, result); err != nil {
 					errCh <- err
 					return

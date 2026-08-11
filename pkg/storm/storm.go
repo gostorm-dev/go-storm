@@ -41,6 +41,7 @@ type Job struct {
 // Result captures response metrics for a single request.
 type Result struct {
 	JobID      int
+	Method     string
 	StatusCode int
 	Duration   time.Duration
 	Error      error
@@ -165,6 +166,7 @@ func Execute(ctx context.Context, client *http.Client, job Job) Result {
 	if err != nil {
 		return Result{
 			JobID:     job.ID,
+			Method:    job.Method,
 			Error:     err,
 			Duration:  time.Since(start),
 			Timestamp: time.Now(),
@@ -181,6 +183,7 @@ func Execute(ctx context.Context, client *http.Client, job Job) Result {
 	if err != nil {
 		return Result{
 			JobID:     job.ID,
+			Method:    job.Method,
 			Error:     err,
 			Duration:  duration,
 			Timestamp: time.Now(),
@@ -190,6 +193,7 @@ func Execute(ctx context.Context, client *http.Client, job Job) Result {
 
 	return Result{
 		JobID:      job.ID,
+		Method:     job.Method,
 		StatusCode: resp.StatusCode,
 		Duration:   duration,
 		Error:      nil,
