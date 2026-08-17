@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/hariomop12/go-storm/internal/config"
+	"github.com/hariomop12/go-storm/internal/metrics"
 	"github.com/hariomop12/go-storm/pkg/storm"
 )
 
@@ -26,6 +29,7 @@ var (
 	body        string
 	format      string
 	output      string
+	metricsPort int
 )
 
 var runCmd = &cobra.Command{
@@ -49,6 +53,25 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 		defer stop()
 
 		tester := storm.NewLoadTester(ctx, cfg)
+
+		// Optional Prometheus metrics endpoint
+		if metricsPort > 0 {
+			tester.SetHooks(
+				func(storm.Job) { metrics.RequestStart() },
+				metrics.Record,
+			)
+			metricsServer := &http.Server{
+				Addr:    fmt.Sprintf(":%d", metricsPort),
+				Handler: metrics.Handler(),
+			}
+			go func() {
+				fmt.Printf("Metrics: http://localhost:%d/metrics\n", metricsPort)
+				if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					fmt.Fprintf(os.Stderr, "metrics server: %v\n", err)
+				}
+			}()
+			defer metricsServer.Shutdown(context.Background())
+		}
 
 		// progress bar
 		var bar *progressbar.ProgressBar
@@ -132,4 +155,5 @@ func init() {
 	runCmd.Flags().StringVarP(&body, "body", "b", "", "Request body (for POST/PUT)")
 	runCmd.Flags().StringVar(&format, "format", "text", "Output format: text or json")
 	runCmd.Flags().StringVar(&output, "output", "", "Write JSON report to a file")
+	runCmd.Flags().IntVar(&metricsPort, "metrics-port", 0, "Prometheus /metrics port (0 = disabled)")
 }

@@ -15,17 +15,27 @@ import (
 
 // LoadTester runs the producer → worker pool → consumer pipeline.
 type LoadTester struct {
-	config    Config
-	client    *http.Client
-	jobs      chan Job
-	results   chan Result
-	wg        sync.WaitGroup
-	ctx       context.Context
-	cancel    context.CancelFunc
-	stats     Stats
-	statsMu   sync.Mutex
-	limiter   *rate.Limiter
-	completed atomic.Int64
+	config     Config
+	client     *http.Client
+	jobs       chan Job
+	results    chan Result
+	wg         sync.WaitGroup
+	ctx        context.Context
+	cancel     context.CancelFunc
+	stats      Stats
+	statsMu    sync.Mutex
+	limiter    *rate.Limiter
+	completed  atomic.Int64
+	onJobStart func(Job)
+	onResult   func(Result)
+}
+
+// SetHooks registers optional callbacks for observability.
+// onJobStart fires before each HTTP request; onResult fires after.
+// Both are safe to leave nil — workers skip them.
+func (lt *LoadTester) SetHooks(onJobStart func(Job), onResult func(Result)) {
+	lt.onJobStart = onJobStart
+	lt.onResult = onResult
 }
 
 // collectResults consumes the results channel and aggregates Stats.

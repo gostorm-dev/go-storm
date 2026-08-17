@@ -12,6 +12,8 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 - Streaming aggregation engine (`Collector`) — O(1) memory, no sort
 - Logarithmic histogram for approximate percentiles (9 buckets, 336 bytes fixed)
 - `BenchmarkCollectorCompare` — direct comparison: batch vs streaming
+- Local mode Prometheus metrics (`storm run --metrics-port`)
+- `LoadTester.SetHooks()` — optional observability callbacks (OnJobStart, OnResult)
 - CHANGELOG.md
 
 ### Changed

@@ -13,7 +13,13 @@ func (lt *LoadTester) worker(id int) {
 			if !ok {
 				return
 			}
+			if lt.onJobStart != nil {
+				lt.onJobStart(job)
+			}
 			result := lt.executeRequest(job)
+			if lt.onResult != nil {
+				lt.onResult(result)
+			}
 			lt.completed.Add(1)
 			select {
 			case lt.results <- result:
