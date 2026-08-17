@@ -20,16 +20,19 @@ import (
 )
 
 var (
-	url         string
-	total       int
-	concurrency int
-	method      string
-	timeout     int
-	rate        int
-	body        string
-	format      string
-	output      string
-	metricsPort int
+	url            string
+	total          int
+	concurrency    int
+	method         string
+	timeout        int
+	rate           int
+	body           string
+	format         string
+	output         string
+	metricsPort    int
+	saturation     bool
+	estimate       bool
+	saturationKill bool
 )
 
 var runCmd = &cobra.Command{
@@ -43,16 +46,55 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 		opts.Output = output
 		cfg := opts.Config
 
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		// --- Step 1: Capacity estimation ---
+		if estimate {
+			color.Cyan("Running capacity estimation (3 seconds)...")
+			fmt.Println()
+
+			capCtx, capCancel := context.WithTimeout(ctx, 10*time.Second)
+			defer capCancel()
+
+			cr, err := storm.EstimateCapacity(
+				capCtx,
+				cfg.URL,
+				cfg.Method,
+				cfg.Concurrency,
+				200,
+				cfg.Timeout,
+			)
+			if err != nil {
+				color.Yellow("Capacity estimation failed: %v", err)
+			} else {
+				targetRPS := float64(cfg.Rate)
+				fmt.Println(storm.FormatCapacityReport(cr, targetRPS))
+			}
+		}
+
+		// --- Print config ---
 		color.Cyan("Starting Load Test")
 		fmt.Printf("Target: %s\n", cfg.URL)
 		fmt.Printf("Total: %d requests\n", cfg.TotalReqs)
 		fmt.Printf("Concurrency: %d workers\n", cfg.Concurrency)
 		fmt.Printf("Rate: %d req/sec\n", cfg.Rate)
-
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer stop()
+		if saturation {
+			fmt.Printf("Saturation: enabled")
+			if saturationKill {
+				fmt.Printf(" (kill on critical)")
+			} else {
+				fmt.Printf(" (warn only)")
+			}
+			fmt.Println()
+		}
 
 		tester := storm.NewLoadTester(ctx, cfg)
+
+		// Enable saturation monitoring
+		if saturation {
+			tester.EnableSaturationMonitoring()
+		}
 
 		// Optional Prometheus metrics endpoint
 		if metricsPort > 0 {
@@ -125,6 +167,7 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 			fmt.Println()
 		}
 
+		// --- Print results ---
 		switch opts.Format {
 		case "json":
 			data, err := tester.JSONReport()
@@ -141,6 +184,15 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 		default:
 			tester.PrintStats()
 		}
+
+		// --- Step 4: Health report ---
+		if saturation {
+			hr := tester.GetHealthReport()
+			if hr != nil {
+				fmt.Println(storm.FormatHealthReport(*hr))
+			}
+		}
+
 		return nil
 	},
 }
@@ -156,4 +208,7 @@ func init() {
 	runCmd.Flags().StringVar(&format, "format", "text", "Output format: text or json")
 	runCmd.Flags().StringVar(&output, "output", "", "Write JSON report to a file")
 	runCmd.Flags().IntVar(&metricsPort, "metrics-port", 0, "Prometheus /metrics port (0 = disabled)")
+	runCmd.Flags().BoolVar(&saturation, "saturation", true, "Enable generator saturation monitoring")
+	runCmd.Flags().BoolVar(&estimate, "estimate", false, "Run capacity estimation before test")
+	runCmd.Flags().BoolVar(&saturationKill, "saturation-kill", false, "Kill test on critical saturation (vs warn only)")
 }

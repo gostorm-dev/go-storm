@@ -1,0 +1,39 @@
+goos: linux
+goarch: amd64
+pkg: github.com/hariomop12/go-storm/pkg/storm
+cpu: AMD Ryzen 5 5500U with Radeon Graphics         
+BenchmarkAggregate/results=1000-12         	   21804	     58037 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkAggregate/results=1000-12         	   21789	     56391 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkAggregate/results=1000-12         	   21238	     56744 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkAggregate/results=10000-12        	     724	   1654330 ns/op	  357873 B/op	      23 allocs/op
+BenchmarkAggregate/results=10000-12        	     747	   1594281 ns/op	  357873 B/op	      23 allocs/op
+BenchmarkAggregate/results=10000-12        	     765	   1552122 ns/op	  357873 B/op	      23 allocs/op
+BenchmarkAggregate/results=100000-12       	      81	  14259637 ns/op	 4101616 B/op	      32 allocs/op
+BenchmarkAggregate/results=100000-12       	      85	  14367019 ns/op	 4101619 B/op	      32 allocs/op
+BenchmarkAggregate/results=100000-12       	      86	  15322157 ns/op	 4101618 B/op	      32 allocs/op
+BenchmarkExecute-12                        	    2581	    527803 ns/op	    5946 B/op	      68 allocs/op
+BenchmarkExecute-12                        	    1940	    551631 ns/op	    5926 B/op	      68 allocs/op
+BenchmarkExecute-12                        	    2407	    457588 ns/op	    5981 B/op	      68 allocs/op
+BenchmarkRun-12                            	      12	 122901858 ns/op	11887400 B/op	   91129 allocs/op
+BenchmarkRun-12                            	       8	 146047754 ns/op	12618021 B/op	   91370 allocs/op
+BenchmarkRun-12                            	       9	 114218293 ns/op	12119496 B/op	   90512 allocs/op
+BenchmarkCollectorCompare/Aggregate/1000-12         	   20692	     55988 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkCollectorCompare/Aggregate/1000-12         	   22076	     56661 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkCollectorCompare/Aggregate/1000-12         	   18903	     57074 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkCollectorCompare/Collector/1000-12         	   26787	     46421 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/1000-12         	   26616	     44755 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/1000-12         	   26143	     45347 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Aggregate/10000-12        	     747	   1575325 ns/op	  357872 B/op	      23 allocs/op
+BenchmarkCollectorCompare/Aggregate/10000-12        	     732	   1629864 ns/op	  357874 B/op	      23 allocs/op
+BenchmarkCollectorCompare/Aggregate/10000-12        	     670	   1637549 ns/op	  357874 B/op	      23 allocs/op
+BenchmarkCollectorCompare/Collector/10000-12        	    2769	    449695 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/10000-12        	    2600	    466516 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/10000-12        	    2666	    440785 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Aggregate/100000-12       	      66	  15814634 ns/op	 4101618 B/op	      32 allocs/op
+BenchmarkCollectorCompare/Aggregate/100000-12       	      82	  15093225 ns/op	 4101618 B/op	      32 allocs/op
+BenchmarkCollectorCompare/Aggregate/100000-12       	      73	  16167765 ns/op	 4101617 B/op	      32 allocs/op
+BenchmarkCollectorCompare/Collector/100000-12       	     254	   4813632 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/100000-12       	     267	   4378107 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/100000-12       	     267	   4393040 ns/op	     336 B/op	       4 allocs/op
+PASS
+ok  	github.com/hariomop12/go-storm/pkg/storm	57.950s

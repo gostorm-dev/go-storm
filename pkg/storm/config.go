@@ -79,10 +79,11 @@ func NewLoadTester(ctx context.Context, config Config) *LoadTester {
 		client: &http.Client{
 			Timeout: config.Timeout,
 		},
-		jobs:    make(chan Job, config.TotalReqs),
-		results: make(chan Result, config.Concurrency),
-		ctx:     ctx,
-		cancel:  cancel,
+		jobs:       make(chan Job, config.TotalReqs),
+		results:    make(chan Result, config.Concurrency),
+		ctx:        ctx,
+		cancel:     cancel,
+		thresholds: DefaultThresholds(),
 	}
 
 	if config.Rate > 0 {

@@ -14,6 +14,17 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 - `BenchmarkCollectorCompare` — direct comparison: batch vs streaming
 - Local mode Prometheus metrics (`storm run --metrics-port`)
 - `LoadTester.SetHooks()` — optional observability callbacks (OnJobStart, OnResult)
+- **Generator saturation detection** — monitors 7 factors in real-time:
+  - CPU usage (via /proc/self/stat)
+  - Memory growth rate
+  - GC pressure (pause time)
+  - Goroutine count
+  - File descriptor usage
+  - RPS achievement (target vs actual)
+  - Worker utilization
+- **Capacity estimation** (`--estimate`) — pre-test benchmark shows max RPS
+- **Health report** — post-test generator health with actionable recommendations
+- New CLI flags: `--saturation`, `--estimate`, `--saturation-kill`
 - CHANGELOG.md
 
 ### Changed

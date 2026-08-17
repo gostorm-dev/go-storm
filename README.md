@@ -18,6 +18,9 @@ Built with classic Go concurrency patterns: **producer → rate-limited pipeline
 - Graceful shutdown on `Ctrl+C` (SIGINT / SIGTERM)
 - Panic-safe and race-free result aggregation
 - Config validation before every run
+- **Generator saturation detection** — monitors CPU, memory, GC, goroutines, FDs, RPS achievement, and worker utilization in real-time
+- **Capacity estimation** (`--estimate`) — pre-test benchmark shows max RPS your machine can handle
+- **Health report** — post-test generator health with actionable recommendations
 - **Distributed load testing** via Redis (`storm run-dist` + `storm agent`): agents on any machine share one job queue and push results back for centralized aggregation
 
 ## Quick Start
@@ -65,6 +68,10 @@ go run ./cmd/storm run [flags]
 | `--body`     | `-b`      | ``                       | Request body, e.g. `-b '{"name":"hariom"}'` |
 | `--format`   |           | `text`                   | Output format: `text` or `json`      |
 | `--output`   |           | ``                       | Write JSON report to a file          |
+| `--metrics-port` |       | `0`                      | Prometheus /metrics port (0 = disabled) |
+| `--saturation` |        | `true`                   | Enable generator saturation monitoring |
+| `--estimate` |          | `false`                  | Run capacity estimation before test  |
+| `--saturation-kill` |   | `false`                  | Kill test on critical saturation     |
 
 ### Examples
 
@@ -367,11 +374,22 @@ go-storm/
 ├── internal/
 │   ├── config/             # CLI flags → Config (Build)
 │   ├── dist/               # distributed engine (Redis queue, agent, coordinator)
-│   └── (tester, stats, ratelimit — planned splits)
+│   └── metrics/            # Prometheus collectors
 ├── pkg/storm/              # Core engine (public library API)
-│   ├── storm.go
-│   └── storm_test.go
-├── .github/workflows/ci.yml # CI: gofmt, build, vet, test -race
+│   ├── storm.go            # LoadTester struct + Run()
+│   ├── config.go           # Config, Job, Result, Stats structs
+│   ├── execute.go          # HTTP request execution
+│   ├── scheduler.go        # Job producer + rate limiter
+│   ├── worker.go           # Worker goroutine
+│   ├── collector.go        # Streaming aggregation (O(1) memory)
+│   ├── aggregate.go        # Batch aggregation (distributed mode)
+│   ├── report.go           # Report struct + formatting
+│   ├── monitor.go          # System stats sampler (CPU, mem, GC, goroutines)
+│   ├── saturation.go       # Threshold detection + health report
+│   └── capacity.go         # Pre-test capacity estimation
+├── .github/workflows/ci.yml
+├── .github/workflows/release.yml
+├── CHANGELOG.md
 ├── Makefile
 ├── go.mod
 └── README.md
@@ -400,6 +418,11 @@ Every push / pull request runs on GitHub Actions: formatting check, build, vet, 
 - [x] **Phase 6 — Distributed enhancements**: per-agent registration + heartbeat, per-agent metrics breakdown, per-run result isolation
 - [ ] **Phase 7 — Job acknowledgment/retry**
 - [x] **Phase 8 — Prometheus/Grafana**: live metrics, dashboards, alerting
+
+## Blog
+
+- [From Curiosity to Go-Storm: Why I Built My Own HTTP Load Tester](https://hariomop12.github.io/blog/from-curiosity-to-go-storm-why-i-built-my-own-http-load-tester)
+- [Why Your Load Test Results Might Be Wrong](https://hariomop12.github.io/blog/why-your-load-test-results-might-be-wrong)
 
 ## License
 
