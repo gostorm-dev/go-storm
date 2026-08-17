@@ -1,0 +1,31 @@
+goos: linux
+goarch: amd64
+pkg: github.com/hariomop12/go-storm/pkg/storm
+cpu: AMD Ryzen 5 5500U with Radeon Graphics         
+BenchmarkAggregate/results=1000-12         	   43426	     58877 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkAggregate/results=1000-12         	   38568	     58463 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkAggregate/results=1000-12         	   40315	     58249 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkAggregate/results=1000-12         	   39894	     58669 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkAggregate/results=1000-12         	   38029	     56383 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkAggregate/results=10000-12        	    1374	   1601055 ns/op	  357874 B/op	      23 allocs/op
+BenchmarkAggregate/results=10000-12        	    1382	   1636238 ns/op	  357874 B/op	      23 allocs/op
+BenchmarkAggregate/results=10000-12        	    1436	   1666076 ns/op	  357875 B/op	      23 allocs/op
+BenchmarkAggregate/results=10000-12        	    1396	   1589279 ns/op	  357875 B/op	      23 allocs/op
+BenchmarkAggregate/results=10000-12        	    1478	   1593242 ns/op	  357876 B/op	      23 allocs/op
+BenchmarkAggregate/results=100000-12       	     157	  14404382 ns/op	 4101619 B/op	      32 allocs/op
+BenchmarkAggregate/results=100000-12       	     157	  14998654 ns/op	 4101619 B/op	      32 allocs/op
+BenchmarkAggregate/results=100000-12       	     162	  17414494 ns/op	 4101618 B/op	      32 allocs/op
+BenchmarkAggregate/results=100000-12       	     158	  15625318 ns/op	 4101617 B/op	      32 allocs/op
+BenchmarkAggregate/results=100000-12       	     154	  14966062 ns/op	 4101616 B/op	      32 allocs/op
+BenchmarkExecute-12                        	    5244	    432004 ns/op	    5989 B/op	      68 allocs/op
+BenchmarkExecute-12                        	    4866	    425415 ns/op	    5965 B/op	      68 allocs/op
+BenchmarkExecute-12                        	    5610	    436808 ns/op	    6006 B/op	      68 allocs/op
+BenchmarkExecute-12                        	    5361	    433110 ns/op	    6034 B/op	      68 allocs/op
+BenchmarkExecute-12                        	    5170	    437840 ns/op	    6022 B/op	      68 allocs/op
+BenchmarkRun-12                            	      19	 125687939 ns/op	14162165 B/op	   91751 allocs/op
+BenchmarkRun-12                            	      18	 139729180 ns/op	15486013 B/op	   91731 allocs/op
+BenchmarkRun-12                            	      16	 135139833 ns/op	15125755 B/op	   92185 allocs/op
+BenchmarkRun-12                            	      15	 153550857 ns/op	15441106 B/op	   91282 allocs/op
+BenchmarkRun-12                            	      16	 135140652 ns/op	14886184 B/op	   91690 allocs/op
+PASS
+ok  	github.com/hariomop12/go-storm/pkg/storm	81.282s
