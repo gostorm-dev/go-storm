@@ -1,0 +1,36 @@
+goos: linux
+goarch: amd64
+pkg: github.com/hariomop12/go-storm/pkg/storm
+cpu: AMD Ryzen 5 5500U with Radeon Graphics         
+BenchmarkCollectorCompare/Aggregate/1000-12         	   29734	     82092 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkCollectorCompare/Aggregate/1000-12         	   30633	     77239 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkCollectorCompare/Aggregate/1000-12         	   33840	     76550 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkCollectorCompare/Aggregate/1000-12         	   31628	     77386 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkCollectorCompare/Aggregate/1000-12         	   31424	     74464 ns/op	   25456 B/op	      16 allocs/op
+BenchmarkCollectorCompare/Collector/1000-12         	   39055	     64353 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/1000-12         	   35196	     60243 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/1000-12         	   41192	     63839 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/1000-12         	   39057	     60008 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/1000-12         	   36572	     60720 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Aggregate/10000-12        	     987	   2279336 ns/op	  357874 B/op	      23 allocs/op
+BenchmarkCollectorCompare/Aggregate/10000-12        	     999	   2367129 ns/op	  357875 B/op	      23 allocs/op
+BenchmarkCollectorCompare/Aggregate/10000-12        	    1066	   2319496 ns/op	  357875 B/op	      23 allocs/op
+BenchmarkCollectorCompare/Aggregate/10000-12        	    1029	   2276250 ns/op	  357874 B/op	      23 allocs/op
+BenchmarkCollectorCompare/Aggregate/10000-12        	    1050	   2507425 ns/op	  357874 B/op	      23 allocs/op
+BenchmarkCollectorCompare/Collector/10000-12        	    3580	    638376 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/10000-12        	    3808	    598588 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/10000-12        	    3681	    688832 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/10000-12        	    3237	    777667 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/10000-12        	    3019	    665597 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Aggregate/100000-12       	      78	  27168609 ns/op	 4101619 B/op	      32 allocs/op
+BenchmarkCollectorCompare/Aggregate/100000-12       	     103	  21833194 ns/op	 4101619 B/op	      32 allocs/op
+BenchmarkCollectorCompare/Aggregate/100000-12       	      88	  23160222 ns/op	 4101621 B/op	      32 allocs/op
+BenchmarkCollectorCompare/Aggregate/100000-12       	      96	  23051768 ns/op	 4101618 B/op	      32 allocs/op
+BenchmarkCollectorCompare/Aggregate/100000-12       	      96	  30153049 ns/op	 4101622 B/op	      32 allocs/op
+BenchmarkCollectorCompare/Collector/100000-12       	     346	   6402337 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/100000-12       	     309	   7427303 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/100000-12       	     331	   7674341 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/100000-12       	     332	   7457137 ns/op	     336 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/100000-12       	     378	   6702405 ns/op	     336 B/op	       4 allocs/op
+PASS
+ok  	github.com/hariomop12/go-storm/pkg/storm	92.106s

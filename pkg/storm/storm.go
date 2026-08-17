@@ -29,14 +29,15 @@ type LoadTester struct {
 }
 
 // collectResults consumes the results channel and aggregates Stats.
+// Uses a streaming Collector — O(concurrency) memory, no sort.
 func (lt *LoadTester) collectResults() {
-	var results []Result
+	c := NewCollector()
 	for result := range lt.results {
-		results = append(results, result)
+		c.Add(result)
 	}
 
 	lt.statsMu.Lock()
-	lt.stats = Aggregate(results)
+	lt.stats = c.Stats()
 	lt.statsMu.Unlock()
 }
 

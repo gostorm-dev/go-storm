@@ -80,7 +80,7 @@ func NewLoadTester(ctx context.Context, config Config) *LoadTester {
 			Timeout: config.Timeout,
 		},
 		jobs:    make(chan Job, config.TotalReqs),
-		results: make(chan Result, config.TotalReqs),
+		results: make(chan Result, config.Concurrency),
 		ctx:     ctx,
 		cancel:  cancel,
 	}

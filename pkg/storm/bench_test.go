@@ -80,3 +80,31 @@ func BenchmarkRun(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkCollectorCompare shows streaming Collector vs batch Aggregate.
+// Same data, different memory models: O(concurrency) vs O(N).
+func BenchmarkCollectorCompare(b *testing.B) {
+	for _, n := range []int{1000, 10000, 100000} {
+		results := makeResults(n)
+
+		b.Run(fmt.Sprintf("Aggregate/%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				Aggregate(results)
+			}
+		})
+
+		b.Run(fmt.Sprintf("Collector/%d", n), func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				c := NewCollector()
+				for _, r := range results {
+					c.Add(r)
+				}
+				_ = c.Stats()
+			}
+		})
+	}
+}
