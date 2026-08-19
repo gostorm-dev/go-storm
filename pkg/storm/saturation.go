@@ -103,6 +103,22 @@ type HealthReport struct {
 	Signals         []Signal
 	MaxMemoryMB     float64
 	Recommendations []string
+
+	// Connection pool statistics
+	ConnectionPoolStats *ConnectionPoolStats
+}
+
+// ConnectionPoolStats tracks connection pool metrics.
+type ConnectionPoolStats struct {
+	ConnectionsCreated   int64
+	ConnectionsReused    int64
+	ConnectionsClosed    int64
+	PoolHits             int64
+	PoolMisses           int64
+	ConnectionReuseRatio float64
+	PoolHitRatio         float64
+	ActiveConnections    int64
+	IdleConnections      int64
 }
 
 // CheckSaturation evaluates all signals and returns a Diagnosis.
@@ -294,6 +310,17 @@ func FormatHealthReport(hr HealthReport) string {
 		b.WriteString(fmt.Sprintf("  File Descriptors: %d\n", hr.Stats.FDCount))
 	}
 	b.WriteString("\n")
+
+	// --- Connection Pool ---
+	if hr.ConnectionPoolStats != nil {
+		b.WriteString("Connection Pool\n")
+		b.WriteString(fmt.Sprintf("  Connections Created:  %d\n", hr.ConnectionPoolStats.ConnectionsCreated))
+		b.WriteString(fmt.Sprintf("  Connections Reused:   %d\n", hr.ConnectionPoolStats.ConnectionsReused))
+		b.WriteString(fmt.Sprintf("  Pool Hits:            %d\n", hr.ConnectionPoolStats.PoolHits))
+		b.WriteString(fmt.Sprintf("  Pool Misses:          %d\n", hr.ConnectionPoolStats.PoolMisses))
+		b.WriteString(fmt.Sprintf("  Reuse Ratio:       %.1f%%\n", hr.ConnectionPoolStats.ConnectionReuseRatio))
+		b.WriteString("\n")
+	}
 
 	// --- Signals ---
 	b.WriteString("Checks\n")

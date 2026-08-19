@@ -16,6 +16,7 @@ import (
 
 	"github.com/hariomop12/go-storm/internal/config"
 	"github.com/hariomop12/go-storm/internal/metrics"
+	"github.com/hariomop12/go-storm/internal/transport"
 	"github.com/hariomop12/go-storm/pkg/storm"
 )
 
@@ -33,6 +34,14 @@ var (
 	saturation     bool
 	estimate       bool
 	saturationKill bool
+
+	// Connection pooling flags
+	maxIdleConns   int
+	maxIdlePerHost int
+	idleTimeout    int
+	keepAlive      int
+	forceHTTP2     bool
+	insecure       bool
 )
 
 var runCmd = &cobra.Command{
@@ -45,6 +54,16 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 		opts.Format = format
 		opts.Output = output
 		cfg := opts.Config
+
+		// Create transport config from CLI flags
+		transportCfg := transport.DefaultConfig()
+		transportCfg.MaxIdleConns = maxIdleConns
+		transportCfg.MaxIdleConnsPerHost = maxIdlePerHost
+		transportCfg.IdleConnTimeout = time.Duration(idleTimeout) * time.Second
+		transportCfg.KeepAlive = time.Duration(keepAlive) * time.Second
+		transportCfg.ForceHTTP2 = forceHTTP2
+		transportCfg.InsecureSkipVerify = insecure
+		cfg.TransportConfig = &transportCfg
 
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -211,4 +230,12 @@ func init() {
 	runCmd.Flags().BoolVar(&saturation, "saturation", true, "Enable generator saturation monitoring")
 	runCmd.Flags().BoolVar(&estimate, "estimate", false, "Run capacity estimation before test")
 	runCmd.Flags().BoolVar(&saturationKill, "saturation-kill", false, "Kill test on critical saturation (vs warn only)")
+
+	// Connection pooling flags
+	runCmd.Flags().IntVar(&maxIdleConns, "max-idle-conns", 200, "Max idle connections across all hosts")
+	runCmd.Flags().IntVar(&maxIdlePerHost, "max-idle-per-host", 50, "Max idle connections per target host")
+	runCmd.Flags().IntVar(&idleTimeout, "idle-timeout", 90, "Idle connection timeout in seconds")
+	runCmd.Flags().IntVar(&keepAlive, "keep-alive", 30, "TCP keep-alive interval in seconds")
+	runCmd.Flags().BoolVar(&forceHTTP2, "force-http2", true, "Force HTTP/2 protocol")
+	runCmd.Flags().BoolVar(&insecure, "insecure", false, "Skip TLS certificate verification")
 }

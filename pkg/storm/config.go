@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hariomop12/go-storm/internal/transport"
 	"golang.org/x/time/rate"
 )
 
@@ -18,6 +19,9 @@ type Config struct {
 	Method      string
 	Payload     []byte
 	Rate        int
+
+	// Transport configuration for connection pooling
+	TransportConfig *transport.Config
 }
 
 // Job represents one HTTP request to fire.
@@ -74,16 +78,37 @@ func (c Config) Validate() error {
 func NewLoadTester(ctx context.Context, config Config) *LoadTester {
 	ctx, cancel := context.WithCancel(ctx)
 
-	lt := &LoadTester{
-		config: config,
-		client: &http.Client{
+	// Create transport with connection pooling
+	var client *http.Client
+	var tStats *transport.Stats
+	if config.TransportConfig != nil {
+		// Use custom transport with connection pooling
+		t := transport.NewTransport(*config.TransportConfig)
+		tStats = t.Stats()
+		client = &http.Client{
+			Transport: t.Transport,
+			Timeout:   config.Timeout,
+		}
+	} else {
+		// Use default transport (backward compatible)
+		client = &http.Client{
 			Timeout: config.Timeout,
-		},
-		jobs:       make(chan Job, config.TotalReqs),
-		results:    make(chan Result, config.Concurrency),
-		ctx:        ctx,
-		cancel:     cancel,
-		thresholds: DefaultThresholds(),
+		}
+	}
+
+	// Create connection stats for httptrace
+	connStats := &ConnectionStats{}
+
+	lt := &LoadTester{
+		config:         config,
+		client:         client,
+		jobs:           make(chan Job, config.TotalReqs),
+		results:        make(chan Result, config.Concurrency),
+		ctx:            ctx,
+		cancel:         cancel,
+		thresholds:     DefaultThresholds(),
+		transportStats: tStats,
+		connStats:      connStats,
 	}
 
 	if config.Rate > 0 {

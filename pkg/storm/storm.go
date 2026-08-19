@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/hariomop12/go-storm/internal/transport"
 	"golang.org/x/time/rate"
 )
 
@@ -34,6 +35,12 @@ type LoadTester struct {
 	enableSaturation bool
 	healthReport     *HealthReport
 	peakMemoryMB     float64
+
+	// Transport stats for connection pool monitoring
+	transportStats *transport.Stats
+
+	// Connection stats for httptrace
+	connStats *ConnectionStats
 }
 
 // SetHooks registers optional callbacks for observability.
@@ -168,6 +175,20 @@ func (lt *LoadTester) buildHealthReport(elapsed time.Duration) {
 		Signals:     diag.Signals,
 		MaxMemoryMB: lt.peakMemoryMB,
 	}
+
+	// Add connection pool stats if available
+	if lt.connStats != nil {
+		snapshot := lt.connStats.Snapshot()
+		hr.ConnectionPoolStats = &ConnectionPoolStats{
+			ConnectionsCreated:   snapshot.ConnectionsCreated,
+			ConnectionsReused:    snapshot.ConnectionsReused,
+			PoolHits:             snapshot.PoolHits,
+			PoolMisses:           snapshot.PoolMisses,
+			ConnectionReuseRatio: float64(snapshot.ConnectionsReused) / float64(snapshot.ConnectionsCreated+snapshot.ConnectionsReused) * 100,
+			PoolHitRatio:         float64(snapshot.PoolHits) / float64(snapshot.PoolHits+snapshot.PoolMisses) * 100,
+		}
+	}
+
 	hr.Recommendations = GenerateRecommendations(hr)
 
 	lt.healthReport = &hr

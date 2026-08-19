@@ -285,7 +285,7 @@ func (r *Redis) RunAgent(ctx context.Context, id string, workers int, requestTim
 				if onJobStart != nil {
 					onJobStart(job)
 				}
-				result := storm.Execute(ctx, client, job)
+				result := storm.Execute(ctx, client, job, nil)
 				if onResult != nil {
 					onResult(result)
 				}

@@ -22,3 +22,9 @@ coverage.out
 .DS_Store
 Screenshot *.png
 plan.md
+
+# Sensitive / internal docs
+BUSINESS-PLAN.md
+FEATURES.md
+CONNECTION_POOLING_PLAN.md
+opencode.json
