@@ -49,6 +49,45 @@ var runCmd = &cobra.Command{
 	Short: "Run a load test against a URL",
 	Long: `Run sends N requests to a URL using a pool of concurrent workers.
 Optionally throttle throughput with --rate, and export results as JSON.`,
+	Example: `  # Basic load test
+  storm run -u https://example.com -n 1000 -c 50
+
+  # Rate limited test (1000 RPS)
+  storm run -u https://example.com -n 5000 -c 100 -r 1000
+
+  # POST with body
+  storm run -u https://api.example.com/users -m POST -b '{"name":"test"}'
+
+  # Capacity estimation
+  storm run -u https://example.com -n 5000 --estimate
+
+  # Save JSON report
+  storm run -u https://example.com -n 1000 --format json --output result.json
+
+  # Prometheus metrics
+  storm run -u https://example.com -n 5000 --metrics-port 9091
+
+  # High-performance with connection pooling
+  storm run -u https://example.com -n 100000 --max-idle-conns 500 --max-idle-per-host 100`,
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if url == "" {
+			return fmt.Errorf("no URL specified — use: storm run -u https://example.com")
+		}
+		validMethods := map[string]bool{"GET": true, "POST": true, "PUT": true, "DELETE": true, "PATCH": true, "HEAD": true}
+		if !validMethods[method] {
+			return fmt.Errorf("invalid HTTP method '%s' — valid: GET, POST, PUT, DELETE, PATCH, HEAD", method)
+		}
+		if total <= 0 {
+			return fmt.Errorf("requests must be greater than 0 — got %d", total)
+		}
+		if concurrency <= 0 {
+			return fmt.Errorf("concurrency must be greater than 0 — got %d", concurrency)
+		}
+		if format != "text" && format != "json" && format != "table" && format != "quiet" && format != "csv" {
+			return fmt.Errorf("invalid format '%s' — valid: text, json, table, quiet, csv", format)
+		}
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		opts := config.Build(url, method, body, total, concurrency, timeout, rate)
 		opts.Format = format
@@ -70,7 +109,7 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 
 		// --- Step 1: Capacity estimation ---
 		if estimate {
-			color.Cyan("Running capacity estimation (3 seconds)...")
+			color.New(color.FgCyan).Println("Running capacity estimation (3 seconds)...")
 			fmt.Println()
 
 			capCtx, capCancel := context.WithTimeout(ctx, 10*time.Second)
@@ -85,7 +124,7 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 				cfg.Timeout,
 			)
 			if err != nil {
-				color.Yellow("Capacity estimation failed: %v", err)
+				color.New(color.FgYellow).Printf("Capacity estimation failed: %v\n", err)
 			} else {
 				targetRPS := float64(cfg.Rate)
 				fmt.Println(storm.FormatCapacityReport(cr, targetRPS))
@@ -93,17 +132,22 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 		}
 
 		// --- Print config ---
-		color.Cyan("Starting Load Test")
-		fmt.Printf("Target: %s\n", cfg.URL)
-		fmt.Printf("Total: %d requests\n", cfg.TotalReqs)
-		fmt.Printf("Concurrency: %d workers\n", cfg.Concurrency)
-		fmt.Printf("Rate: %d req/sec\n", cfg.Rate)
-		if saturation {
-			fmt.Printf("Saturation: enabled")
-			if saturationKill {
-				fmt.Printf(" (kill on critical)")
-			} else {
-				fmt.Printf(" (warn only)")
+		if opts.Format == "text" || opts.Format == "" || opts.Format == "table" {
+			bold := color.New(color.FgWhite, color.Bold).SprintFunc()
+			dim := color.New(color.FgHiBlack).SprintFunc()
+
+			fmt.Printf("%s %s\n", bold("Target:"), cfg.URL)
+			fmt.Printf("%s %s\n", bold("Requests:"), fmt.Sprintf("%d", cfg.TotalReqs))
+			fmt.Printf("%s %s\n", bold("Workers:"), fmt.Sprintf("%d", cfg.Concurrency))
+			if cfg.Rate > 0 {
+				fmt.Printf("%s %s\n", bold("Rate:"), fmt.Sprintf("%d req/sec", cfg.Rate))
+			}
+			if saturation {
+				mode := dim("warn only")
+				if saturationKill {
+					mode = color.New(color.FgRed).Sprint("kill on critical")
+				}
+				fmt.Printf("%s %s\n", bold("Saturation:"), mode)
 			}
 			fmt.Println()
 		}
@@ -126,7 +170,7 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 				Handler: metrics.Handler(),
 			}
 			go func() {
-				fmt.Printf("Metrics: http://localhost:%d/metrics\n", metricsPort)
+				color.New(color.FgCyan).Printf("Metrics: http://localhost:%d/metrics\n", metricsPort)
 				if err := metricsServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 					fmt.Fprintf(os.Stderr, "metrics server: %v\n", err)
 				}
@@ -137,7 +181,7 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 		// progress bar
 		var bar *progressbar.ProgressBar
 		var done chan struct{}
-		if opts.Format == "text" {
+		if opts.Format == "text" || opts.Format == "" {
 			bar = progressbar.NewOptions64(int64(cfg.TotalReqs),
 				progressbar.OptionSetDescription("Running"),
 				progressbar.OptionSetWidth(40),
@@ -197,15 +241,21 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 				if err := os.WriteFile(opts.Output, data, 0644); err != nil {
 					return err
 				}
-				color.Green("Report saved to %s", opts.Output)
+				color.New(color.FgGreen).Printf("Report saved to %s\n", opts.Output)
 			}
 			fmt.Println(string(data))
+		case "table":
+			tester.PrintStatsTable()
+		case "quiet":
+			tester.PrintStatsQuiet()
+		case "csv":
+			tester.PrintStatsCSV()
 		default:
 			tester.PrintStats()
 		}
 
 		// --- Step 4: Health report ---
-		if saturation {
+		if saturation && (opts.Format == "text" || opts.Format == "" || opts.Format == "table") {
 			hr := tester.GetHealthReport()
 			if hr != nil {
 				fmt.Println(storm.FormatHealthReport(*hr))
@@ -217,14 +267,14 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 }
 
 func init() {
-	runCmd.Flags().StringVarP(&url, "url", "u", "https://hariomtanu.com", "Target URL")
+	runCmd.Flags().StringVarP(&url, "url", "u", "", "Target URL (required)")
 	runCmd.Flags().IntVarP(&total, "requests", "n", 100, "Total requests to send")
 	runCmd.Flags().IntVarP(&concurrency, "concurrency", "c", 10, "Concurrency level (parallel workers)")
 	runCmd.Flags().StringVarP(&method, "method", "m", "GET", "HTTP method: GET, POST, PUT, DELETE")
 	runCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "Request timeout in seconds")
 	runCmd.Flags().IntVarP(&rate, "rate", "r", 0, "Max requests per second (0 = unlimited)")
 	runCmd.Flags().StringVarP(&body, "body", "b", "", "Request body (for POST/PUT)")
-	runCmd.Flags().StringVar(&format, "format", "text", "Output format: text or json")
+	runCmd.Flags().StringVar(&format, "format", "text", "Output format: text, json, table, quiet, csv")
 	runCmd.Flags().StringVar(&output, "output", "", "Write JSON report to a file")
 	runCmd.Flags().IntVar(&metricsPort, "metrics-port", 0, "Prometheus /metrics port (0 = disabled)")
 	runCmd.Flags().BoolVar(&saturation, "saturation", true, "Enable generator saturation monitoring")

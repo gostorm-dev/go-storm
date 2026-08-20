@@ -33,6 +33,17 @@ queue, executes them, and pushes the results back.
 
 Run multiple agents (on the same machine or different ones) and drive them
 all with a single 'storm run-dist' command.`,
+	Example: `  # Start agent with default settings
+  storm agent
+
+  # Start named agent with 20 workers
+  storm agent --name agent-1 -c 20
+
+  # Start agent with custom Redis
+  storm agent --redis 10.0.1.5:6379
+
+  # Start agent with metrics
+  storm agent --metrics-port 9091 --stay-alive`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()

@@ -27,6 +27,14 @@ from the shared queue and pushes results back.
 
 Start agents with 'storm agent' on the machines you want to load from,
 then run this command once.`,
+	Example: `  # Basic distributed test
+  storm run-dist -u https://example.com -n 10000
+
+  # Wait for 3 agents before starting
+  storm run-dist -u https://example.com -n 10000 --agents 3
+
+  # Save report and show agent breakdown
+  storm run-dist -u https://example.com -n 10000 --format json --output report.json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if total <= 0 {
 			return fmt.Errorf("total requests must be positive, got %d", total)
@@ -147,7 +155,7 @@ func printAgentBreakdown(breakdown []dist.AgentStats) {
 }
 
 func init() {
-	runDistCmd.Flags().StringVarP(&url, "url", "u", "https://hariomtanu.com", "Target URL")
+	runDistCmd.Flags().StringVarP(&url, "url", "u", "", "Target URL (required)")
 	runDistCmd.Flags().IntVarP(&total, "requests", "n", 100, "Total requests to send")
 	runDistCmd.Flags().StringVarP(&method, "method", "m", "GET", "HTTP method: GET, POST, PUT, DELETE")
 	runDistCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "Request timeout in seconds")

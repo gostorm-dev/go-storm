@@ -14,6 +14,11 @@ var reportCmd = &cobra.Command{
 	Use:   "report <file>",
 	Short: "Display a saved JSON report as text",
 	Args:  cobra.ExactArgs(1),
+	Example: `  # View a saved report
+  storm report result.json
+
+  # View report from distributed test
+  storm report dist-report.json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		data, err := os.ReadFile(args[0])
 		if err != nil {

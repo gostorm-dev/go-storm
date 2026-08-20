@@ -41,6 +41,9 @@ type LoadTester struct {
 
 	// Connection stats for httptrace
 	connStats *ConnectionStats
+
+	// Abort on consecutive failures (atomic counter)
+	consecutiveFailures atomic.Int64
 }
 
 // SetHooks registers optional callbacks for observability.
@@ -179,13 +182,23 @@ func (lt *LoadTester) buildHealthReport(elapsed time.Duration) {
 	// Add connection pool stats if available
 	if lt.connStats != nil {
 		snapshot := lt.connStats.Snapshot()
+		totalConns := snapshot.ConnectionsCreated + snapshot.ConnectionsReused
+		totalPool := snapshot.PoolHits + snapshot.PoolMisses
+		reuseRatio := 0.0
+		hitRatio := 0.0
+		if totalConns > 0 {
+			reuseRatio = float64(snapshot.ConnectionsReused) / float64(totalConns) * 100
+		}
+		if totalPool > 0 {
+			hitRatio = float64(snapshot.PoolHits) / float64(totalPool) * 100
+		}
 		hr.ConnectionPoolStats = &ConnectionPoolStats{
 			ConnectionsCreated:   snapshot.ConnectionsCreated,
 			ConnectionsReused:    snapshot.ConnectionsReused,
 			PoolHits:             snapshot.PoolHits,
 			PoolMisses:           snapshot.PoolMisses,
-			ConnectionReuseRatio: float64(snapshot.ConnectionsReused) / float64(snapshot.ConnectionsCreated+snapshot.ConnectionsReused) * 100,
-			PoolHitRatio:         float64(snapshot.PoolHits) / float64(snapshot.PoolHits+snapshot.PoolMisses) * 100,
+			ConnectionReuseRatio: reuseRatio,
+			PoolHitRatio:         hitRatio,
 		}
 	}
 
@@ -218,6 +231,21 @@ func (lt *LoadTester) getWorkerUtilization() float64 {
 // PrintStats renders the aggregated results to stdout.
 func (lt *LoadTester) PrintStats() {
 	PrintStatsReport(lt.config, lt.stats)
+}
+
+// PrintStatsTable renders results in a formatted table.
+func (lt *LoadTester) PrintStatsTable() {
+	PrintStatsTable(lt.config, lt.stats)
+}
+
+// PrintStatsQuiet renders only numbers, comma-separated (for CI/CD).
+func (lt *LoadTester) PrintStatsQuiet() {
+	PrintStatsQuiet(lt.config, lt.stats)
+}
+
+// PrintStatsCSV renders results in CSV format.
+func (lt *LoadTester) PrintStatsCSV() {
+	PrintStatsCSV(lt.config, lt.stats)
 }
 
 // JSONReport serializes the run results as indented JSON.
