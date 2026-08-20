@@ -20,6 +20,18 @@ coverage.out
 
 # OS files
 .DS_Store
+
+# Personal planning (not for repo)
+*.plan.md
+*.plan/
+plan.md
+BUSINESS-PLAN.md
+CLI-OVERHAUL-PLAN.md
+CONNECTION_POOLING_PLAN.md
+DESIGN-*.md
+FEATURES.md
+blog-saturation.md
+full-report.json
 Screenshot *.png
 plan.md
 
