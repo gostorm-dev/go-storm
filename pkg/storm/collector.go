@@ -71,6 +71,8 @@ func (h *Histogram) Percentile(pct float64) time.Duration {
 	return time.Duration(h.buckets[len(h.buckets)-1]) * time.Millisecond
 }
 
+const maxStoredErrors = 100
+
 // Collector incrementally aggregates results into Stats.
 // Unlike Aggregate(), it never stores all results — each Add() updates
 // running counters and the histogram in O(1) time with fixed memory.
@@ -84,15 +86,18 @@ type Collector struct {
 	firstResult   bool
 	statusCodes   map[int]int
 	errors        []string
+	errorCount    int
+	errorSamples  map[string]int
 	hist          *Histogram
 }
 
 // NewCollector creates a ready-to-use streaming aggregator.
 func NewCollector() *Collector {
 	return &Collector{
-		statusCodes: make(map[int]int),
-		hist:        NewHistogram(),
-		firstResult: true,
+		statusCodes:  make(map[int]int),
+		errorSamples: make(map[string]int),
+		hist:         NewHistogram(),
+		firstResult:  true,
 	}
 }
 
@@ -102,7 +107,13 @@ func (c *Collector) Add(r Result) {
 
 	if r.Error != nil {
 		c.failCount++
-		c.errors = append(c.errors, fmt.Sprintf("Job %d: %v", r.JobID, r.Error))
+		c.errorCount++
+		errKey := r.Error.Error()
+		c.errorSamples[errKey]++
+		// Store up to maxStoredErrors unique error messages
+		if len(c.errors) < maxStoredErrors {
+			c.errors = append(c.errors, fmt.Sprintf("Job %d: %v", r.JobID, r.Error))
+		}
 		return
 	}
 

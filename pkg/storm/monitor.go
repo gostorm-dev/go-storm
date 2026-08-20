@@ -59,10 +59,12 @@ func (m *Monitor) Start() {
 	go m.loop()
 }
 
-// Stop halts sampling and waits for the goroutine to exit.
+// Stop halts sampling and takes a final snapshot.
 func (m *Monitor) Stop() {
 	m.cancel()
 	<-m.done
+	// Take one final sample so short tests still get CPU/memory data.
+	m.sample()
 }
 
 // Stats returns the most recent system snapshot.

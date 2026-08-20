@@ -280,7 +280,11 @@ func FormatHealthReport(hr HealthReport) string {
 
 	// --- Load ---
 	b.WriteString("Load\n")
-	b.WriteString(fmt.Sprintf("  Target RPS:       %s\n", formatFloat(hr.TargetRPS)))
+	if hr.TargetRPS > 0 {
+		b.WriteString(fmt.Sprintf("  Target RPS:       %s\n", formatFloat(hr.TargetRPS)))
+	} else {
+		b.WriteString("  Target RPS:       Unlimited\n")
+	}
 	b.WriteString(fmt.Sprintf("  Achieved RPS:     %s", formatFloat(hr.AchievedRPS)))
 	if hr.TargetRPS > 0 {
 		ratio := hr.AchievedRPS / hr.TargetRPS * 100
