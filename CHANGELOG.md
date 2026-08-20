@@ -6,6 +6,33 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.5.0] — 2026-08-20
+
+### Added
+- **CLI world-class overhaul**:
+  - ASCII banner with branding
+  - Examples in help for all commands
+  - Flag validation with actionable error messages
+  - 5 output formats: text, json, table, quiet, csv
+  - Version system with ldflags (version, commit, buildDate)
+  - Makefile with build/install/test/race/bench targets
+- **Battle tested against k6**:
+  - 10K test: go-storm 1.68x faster
+  - 200K test: go-storm finished, k6 crashed
+  - 50K rate limit: go-storm 100% accurate
+  - 10K POST: go-storm 1.89x faster
+  - 100K POST: go-storm 1.57x faster
+  - Final score: go-storm 6, k6 0
+- **README rewrite** with real benchmark numbers
+
+### Changed
+- Default URL removed — `-u` flag is now required
+- `--format` flag now supports: text, json, table, quiet, csv
+- Health report only shown for text/table formats (not quiet/csv)
+- Config output suppressed for quiet/csv formats
+
+---
+
 ## [Unreleased]
 
 ### Fixed
