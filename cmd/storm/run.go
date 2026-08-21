@@ -230,20 +230,28 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 			fmt.Println()
 		}
 
-		// --- Print results ---
-		switch opts.Format {
-		case "json":
+		// --- Generate the JSON report when needed ---
+		var jsonOut []byte
+		if opts.Format == "json" || opts.Output != "" {
 			data, err := tester.JSONReport()
 			if err != nil {
 				return err
 			}
-			if opts.Output != "" {
-				if err := os.WriteFile(opts.Output, data, 0644); err != nil {
-					return err
-				}
-				color.New(color.FgGreen).Printf("Report saved to %s\n", opts.Output)
+			jsonOut = data
+		}
+
+		// --- Save the report to a file if requested ---
+		if opts.Output != "" {
+			if err := os.WriteFile(opts.Output, jsonOut, 0644); err != nil {
+				return fmt.Errorf("failed to write report to %s: %w", opts.Output, err)
 			}
-			fmt.Println(string(data))
+			color.New(color.FgGreen).Printf("Report saved to %s\n", opts.Output)
+		}
+
+		// --- Print results ---
+		switch opts.Format {
+		case "json":
+			fmt.Println(string(jsonOut))
 		case "table":
 			tester.PrintStatsTable()
 		case "quiet":

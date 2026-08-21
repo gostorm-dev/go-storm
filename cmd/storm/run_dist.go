@@ -107,18 +107,24 @@ then run this command once.`,
 			return err
 		}
 
-		if format == "json" {
+		var jsonOut []byte
+		if format == "json" || output != "" {
 			data, err := storm.ReportJSON(cfg, stats)
 			if err != nil {
 				return err
 			}
-			if output != "" {
-				if err := os.WriteFile(output, data, 0644); err != nil {
-					return err
-				}
-				color.Green("Report saved to %s", output)
+			jsonOut = data
+		}
+
+		if output != "" {
+			if err := os.WriteFile(output, jsonOut, 0644); err != nil {
+				return fmt.Errorf("failed to write report to %s: %w", output, err)
 			}
-			fmt.Println(string(data))
+			color.Green("Report saved to %s", output)
+		}
+
+		if format == "json" {
+			fmt.Println(string(jsonOut))
 			return nil
 		}
 
