@@ -68,6 +68,11 @@ then run this command once.`,
 			cfg.Headers.Add(k, v)
 		}
 
+		// Brand banner for human-readable output only — json stays clean.
+		if format == "" || format == "text" {
+			printBanner()
+		}
+
 		color.Cyan("Distributed Load Test")
 		fmt.Printf("Target: %s\n", cfg.URL)
 		fmt.Printf("Total: %d requests\n", total)

@@ -96,6 +96,12 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 		opts := config.Build(url, method, body, total, concurrency, timeout, rate)
 		opts.Format = format
 		opts.Output = output
+
+		// Brand banner for human-readable output only — json/csv/quiet stay clean.
+		if opts.Format == "" || opts.Format == "text" || opts.Format == "table" {
+			printBanner()
+		}
+
 		cfg := opts.Config
 
 		cfg.Headers = http.Header{}
