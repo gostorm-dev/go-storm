@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -58,6 +59,15 @@ then run this command once.`,
 			Payload: []byte(body),
 		}
 
+		cfg.Headers = http.Header{}
+		for _, h := range headers {
+			k, v, err := storm.ParseHeaderSpec(h)
+			if err != nil {
+				return err
+			}
+			cfg.Headers.Add(k, v)
+		}
+
 		color.Cyan("Distributed Load Test")
 		fmt.Printf("Target: %s\n", cfg.URL)
 		fmt.Printf("Total: %d requests\n", total)
@@ -69,10 +79,11 @@ then run this command once.`,
 		jobs := make([]storm.Job, total)
 		for i := range jobs {
 			jobs[i] = storm.Job{
-				ID:     i + 1,
-				URL:    cfg.URL,
-				Method: cfg.Method,
-				Body:   cfg.Payload,
+				ID:      i + 1,
+				URL:     cfg.URL,
+				Method:  cfg.Method,
+				Body:    cfg.Payload,
+				Headers: cfg.Headers,
 			}
 		}
 
@@ -125,11 +136,20 @@ then run this command once.`,
 
 		if format == "json" {
 			fmt.Println(string(jsonOut))
+			if violation := evaluateThresholds(stats); violation != "" {
+				fmt.Fprintf(os.Stderr, "\nFAIL: %s\n", violation)
+				os.Exit(2)
+			}
 			return nil
 		}
 
 		printAgentBreakdown(breakdown)
 		storm.PrintStatsReport(cfg, stats)
+
+		if violation := evaluateThresholds(stats); violation != "" {
+			fmt.Fprintf(os.Stderr, "\nFAIL: %s\n", violation)
+			os.Exit(2)
+		}
 		return nil
 	},
 }
@@ -166,6 +186,9 @@ func init() {
 	runDistCmd.Flags().StringVarP(&method, "method", "m", "GET", "HTTP method: GET, POST, PUT, DELETE")
 	runDistCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "Request timeout in seconds")
 	runDistCmd.Flags().StringVarP(&body, "body", "b", "", "Request body (for POST/PUT)")
+	runDistCmd.Flags().StringArrayVarP(&headers, "header", "H", nil, "Custom header (repeatable): -H \"Key: Value\"")
+	runDistCmd.Flags().IntVar(&failAboveErrors, "fail-above-errors", -1, "Exit with code 2 if failed requests exceed N (-1 = disabled)")
+	runDistCmd.Flags().Float64Var(&failAboveP95, "fail-above-p95", -1, "Exit with code 2 if p95 latency exceeds MS milliseconds (-1 = disabled)")
 	runDistCmd.Flags().IntVar(&waitAgents, "agents", 0, "Wait for this many agents before starting (0 = don't wait)")
 	runDistCmd.Flags().StringVar(&format, "format", "text", "Output format: text or json")
 	runDistCmd.Flags().StringVar(&output, "output", "", "Write JSON report to a file")

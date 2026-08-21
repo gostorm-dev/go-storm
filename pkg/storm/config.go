@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/hariomop12/go-storm/internal/transport"
@@ -20,17 +21,44 @@ type Config struct {
 	Payload     []byte
 	Rate        int
 
+	// Headers applied to every request. User-supplied headers always win
+	// over engine defaults such as Content-Type.
+	Headers http.Header
+
 	// Transport configuration for connection pooling
 	TransportConfig *transport.Config
 }
 
 // Job represents one HTTP request to fire.
 type Job struct {
-	ID     int
-	URL    string
-	Method string
-	Body   []byte
+	ID      int
+	URL     string
+	Method  string
+	Body    []byte
+	Headers http.Header
 }
+
+// ParseHeaderSpec parses a curl-style "Key: Value" header specification.
+// The split happens on the first colon so values may themselves contain
+// colons (URLs, timestamps). The returned key is ready for http.Header,
+// which canonicalizes names on Add.
+func ParseHeaderSpec(spec string) (key, val string, err error) {
+	k, v, found := strings.Cut(spec, ":")
+	if !found {
+		return "", "", fmt.Errorf("invalid header %q: expected \"Key: Value\" format", spec)
+	}
+	key = strings.TrimSpace(k)
+	val = strings.TrimSpace(v)
+	if key == "" {
+		return "", "", fmt.Errorf("invalid header %q: empty header name", spec)
+	}
+	return key, val, nil
+}
+
+// jobBufferFactor sizes the jobs channel relative to concurrency.
+// A window of 2 jobs per worker absorbs producer stalls (e.g. rate
+// limiter ticks) without pre-allocating memory proportional to TotalReqs.
+const jobBufferFactor = 2
 
 // Result captures response metrics for a single request.
 type Result struct {
@@ -100,9 +128,14 @@ func NewLoadTester(ctx context.Context, config Config) *LoadTester {
 	connStats := &ConnectionStats{}
 
 	lt := &LoadTester{
-		config:         config,
-		client:         client,
-		jobs:           make(chan Job, config.TotalReqs),
+		config: config,
+		client: client,
+		// Buffer only a small window of jobs instead of all TotalReqs.
+		// Pre-allocating TotalReqs slots costs ~64 bytes per job upfront,
+		// which is hundreds of MB (or GBs) for large -n values before the
+		// test even starts. produceJobs keeps the small buffer topped up,
+		// so workers never starve and memory stays O(concurrency).
+		jobs:           make(chan Job, config.Concurrency*jobBufferFactor),
 		results:        make(chan Result, config.Concurrency),
 		ctx:            ctx,
 		cancel:         cancel,

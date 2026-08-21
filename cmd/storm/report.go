@@ -38,8 +38,8 @@ var reportCmd = &cobra.Command{
 		fmt.Printf("Successful: %d\n", report.Successful)
 		fmt.Printf("Failed: %d\n", report.Failed)
 		fmt.Printf("Success Rate: %.2f%%\n", report.SuccessRate)
-		fmt.Printf("Min/Avg/Max: %v / %v / %v\n", report.MinResponseTime, report.AvgResponseTime, report.MaxResponseTime)
-		fmt.Printf("p50/p95/p99: %v / %v / %v\n", report.P50, report.P95, report.P99)
+		fmt.Printf("Min/Avg/Max: %.2f / %.2f / %.2f ms\n", report.MinResponseTime, report.AvgResponseTime, report.MaxResponseTime)
+		fmt.Printf("p50/p95/p99: %.2f / %.2f / %.2f ms\n", report.P50, report.P95, report.P99)
 		fmt.Printf("Requests/sec: %.2f\n", report.RequestsPerSec)
 		return nil
 	},

@@ -30,7 +30,7 @@ func NewHistogram() *Histogram {
 
 // Observe records one duration into the appropriate bucket.
 func (h *Histogram) Observe(d time.Duration) {
-	ms := float64(d.Milliseconds())
+	ms := float64(d) / float64(time.Millisecond)
 	for i, bound := range h.buckets {
 		if ms <= bound {
 			h.counts[i]++
@@ -44,9 +44,9 @@ func (h *Histogram) Observe(d time.Duration) {
 }
 
 // Percentile returns the approximate duration at the given percentile (0-100)
-// using nearest-rank method on histogram buckets. The result is the upper
-// bound of the bucket containing the target rank — typically within one
-// bucket width of the exact value.
+// using linear interpolation within the containing histogram bucket, assuming
+// observations are uniformly distributed inside it. This is far more accurate
+// than snapping to the bucket's upper bound, especially for wide buckets.
 func (h *Histogram) Percentile(pct float64) time.Duration {
 	if h.total == 0 {
 		return 0
@@ -59,12 +59,20 @@ func (h *Histogram) Percentile(pct float64) time.Duration {
 
 	cumulative := 0
 	for i, count := range h.counts {
+		prev := cumulative
 		cumulative += count
-		if cumulative >= target {
-			if i < len(h.buckets) {
-				return time.Duration(h.buckets[i]) * time.Millisecond
+		if cumulative >= target && count > 0 {
+			if i >= len(h.buckets) {
+				// Overflow bucket has no upper bound; report the last known one.
+				return time.Duration(h.buckets[len(h.buckets)-1]) * time.Millisecond
 			}
-			return time.Duration(h.buckets[len(h.buckets)-1]) * time.Millisecond
+			lower := 0.0
+			if i > 0 {
+				lower = h.buckets[i-1]
+			}
+			fraction := float64(target-prev) / float64(count)
+			value := lower + fraction*(h.buckets[i]-lower)
+			return time.Duration(value * float64(time.Millisecond))
 		}
 	}
 

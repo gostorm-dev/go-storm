@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptrace"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -60,6 +61,34 @@ func (lt *LoadTester) executeRequest(job Job) Result {
 	return Execute(lt.ctx, lt.client, job, lt.connStats)
 }
 
+// applyHeaders applies user-supplied headers to the request, then fills in
+// engine defaults for anything the user did not set.
+//
+// Host is special-cased: Go sends the request's Host field on the wire and
+// ignores a Host entry in the header map, so honoring it requires req.Host.
+func applyHeaders(req *http.Request, job Job) {
+	for key, vals := range job.Headers {
+		if len(vals) == 0 {
+			continue
+		}
+		if strings.EqualFold(key, "Host") {
+			req.Host = vals[0]
+			continue
+		}
+		for _, v := range vals {
+			req.Header.Add(key, v)
+		}
+	}
+
+	// Default Content-Type for body-carrying methods, but only when the
+	// user did not supply their own — user headers always win.
+	if job.Method == "POST" || job.Method == "PUT" {
+		if req.Header.Get("Content-Type") == "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+	}
+}
+
 // Execute performs a single HTTP request and records its result.
 // Exported so distributed agents can reuse the same request logic.
 func Execute(ctx context.Context, client *http.Client, job Job, connStats *ConnectionStats) Result {
@@ -82,9 +111,7 @@ func Execute(ctx context.Context, client *http.Client, job Job, connStats *Conne
 		}
 	}
 
-	if job.Method == "POST" || job.Method == "PUT" {
-		req.Header.Set("Content-Type", "application/json")
-	}
+	applyHeaders(req, job)
 
 	// Add httptrace to track connection events.
 	// Use atomic bool because ConnectStart fires from a different goroutine.

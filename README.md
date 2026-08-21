@@ -80,10 +80,12 @@ k6:
 - Concurrent workers with configurable pool size
 - Rate limiting via token bucket (`-r` / `--rate`)
 - GET / POST / PUT / DELETE / PATCH / HEAD
+- Custom headers (`-H "Authorization: Bearer $TOKEN"`, repeatable)
 - Per-request timeout
-- Rich statistics: min/avg/max, p50/p95/p99, RPS, success rate
+- Rich statistics: min/avg/max, p50/p95/p99 (sub-millisecond precision), RPS, success rate
 - Status code distribution
 - Live progress bar with real-time RPS
+- CI gate flags: `--fail-above-errors`, `--fail-above-p95` (exit 2 on violation)
 
 ### Output Formats
 - `text` — human-readable with progress bar (default)
@@ -158,6 +160,15 @@ storm run -u https://example.com -n 5000 -r 1000
 # POST with JSON body
 storm run -u https://api.example.com/users -m POST -b '{"name":"test"}'
 
+# Authenticated request with custom headers
+storm run -u https://api.example.com/me \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "X-Trace: loadtest"
+
+# CI gate — exit code 2 if >20 failures or p95 slower than 500ms
+storm run -u https://staging.api.com/users -n 2000 -c 100 \
+  --fail-above-errors 20 --fail-above-p95 500
+
 # Save results as JSON
 storm run -u https://example.com -n 1000 --format json --output result.json
 
@@ -193,8 +204,11 @@ storm run -u https://example.com -n 1000 --format table
 | `--timeout` | `-t` | `10` | Request timeout (seconds) |
 | `--rate` | `-r` | `0` | Rate limit RPS (0 = unlimited) |
 | `--body` | `-b` | | Request body |
+| `--header` | `-H` | | Custom header, repeatable: `-H "Key: Value"` |
 | `--format` | | `text` | Output: `text`, `json`, `table`, `quiet`, `csv` |
 | `--output` | | | Save report to file |
+| `--fail-above-errors` | | `-1` *(off)* | Exit 2 if failed requests exceed N |
+| `--fail-above-p95` | | `-1` *(off)* | Exit 2 if p95 latency exceeds MS ms |
 | `--saturation` | | `true` | Generator health monitoring |
 | `--estimate` | | `false` | Pre-test capacity estimation |
 | `--saturation-kill` | | `false` | Kill on critical saturation |
@@ -205,6 +219,28 @@ storm run -u https://example.com -n 1000 --format table
 | `--keep-alive` | | `30` | TCP keep-alive (s) |
 | `--force-http2` | | `true` | Force HTTP/2 |
 | `--insecure` | | `false` | Skip TLS verify |
+
+---
+
+## CI/CD Integration
+
+go-storm turns load tests into quality gates. By default it always exits `0` after a completed run — you opt in to failure conditions:
+
+| Exit Code | Meaning |
+|-----------|---------|
+| `0` | Test ran, all thresholds passed (or none set) |
+| `1` | Configuration error (bad URL, invalid header format) |
+| `2` | **Threshold violation** — the service failed the gate |
+
+```yaml
+# .github/workflows/loadtest.yml
+- name: Load test gate
+  run: |
+    storm run -u https://staging.api.com/users -n 2000 -c 100 \
+      --fail-above-errors 20 --fail-above-p95 500
+```
+
+The pipeline goes red if more than 20 requests fail **or** p95 latency exceeds 500ms. The full report is always printed first, so failures come with complete debugging data.
 
 ---
 
@@ -290,15 +326,17 @@ Checks
   "successful": 10000,
   "failed": 0,
   "success_rate": 100,
-  "avg_response_time_ms": 7,
-  "p50_ms": 10,
-  "p95_ms": 50,
+  "avg_response_time_ms": 7.42,
+  "p50_ms": 6.85,
+  "p95_ms": 48.21,
   "p99_ms": 50,
   "requests_per_sec": 11960.10,
   "total_duration_ms": 836,
   "status_codes": { "200": 10000 }
 }
 ```
+
+Latency values are fractional milliseconds — sub-millisecond precision is preserved, so fast targets never report a misleading `0ms`.
 
 ---
 

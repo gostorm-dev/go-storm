@@ -28,6 +28,7 @@ var (
 	timeout        int
 	rate           int
 	body           string
+	headers        []string
 	format         string
 	output         string
 	metricsPort    int
@@ -57,6 +58,9 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 
   # POST with body
   storm run -u https://api.example.com/users -m POST -b '{"name":"test"}'
+
+  # Authenticated request with custom headers
+  storm run -u https://api.example.com/me -H "Authorization: Bearer $TOKEN" -H "X-Trace: loadtest"
 
   # Capacity estimation
   storm run -u https://example.com -n 5000 --estimate
@@ -93,6 +97,15 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 		opts.Format = format
 		opts.Output = output
 		cfg := opts.Config
+
+		cfg.Headers = http.Header{}
+		for _, h := range headers {
+			k, v, err := storm.ParseHeaderSpec(h)
+			if err != nil {
+				return err
+			}
+			cfg.Headers.Add(k, v)
+		}
 
 		// Create transport config from CLI flags
 		transportCfg := transport.DefaultConfig()
@@ -214,7 +227,8 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 			}()
 		}
 
-		if _, err := tester.Run(); err != nil {
+		finalStats, err := tester.Run()
+		if err != nil {
 			if bar != nil {
 				close(done)
 				bar.Finish()
@@ -270,6 +284,12 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 			}
 		}
 
+		// --- CI gate: opt-in threshold evaluation (exit 2 on violation) ---
+		if violation := evaluateThresholds(finalStats); violation != "" {
+			fmt.Fprintf(os.Stderr, "\nFAIL: %s\n", violation)
+			os.Exit(2)
+		}
+
 		return nil
 	},
 }
@@ -282,6 +302,9 @@ func init() {
 	runCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "Request timeout in seconds")
 	runCmd.Flags().IntVarP(&rate, "rate", "r", 0, "Max requests per second (0 = unlimited)")
 	runCmd.Flags().StringVarP(&body, "body", "b", "", "Request body (for POST/PUT)")
+	runCmd.Flags().StringArrayVarP(&headers, "header", "H", nil, "Custom header (repeatable): -H \"Key: Value\"")
+	runCmd.Flags().IntVar(&failAboveErrors, "fail-above-errors", -1, "Exit with code 2 if failed requests exceed N (-1 = disabled)")
+	runCmd.Flags().Float64Var(&failAboveP95, "fail-above-p95", -1, "Exit with code 2 if p95 latency exceeds MS milliseconds (-1 = disabled)")
 	runCmd.Flags().StringVar(&format, "format", "text", "Output format: text, json, table, quiet, csv")
 	runCmd.Flags().StringVar(&output, "output", "", "Write JSON report to a file")
 	runCmd.Flags().IntVar(&metricsPort, "metrics-port", 0, "Prometheus /metrics port (0 = disabled)")

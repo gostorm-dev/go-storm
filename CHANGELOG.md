@@ -35,11 +35,31 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **Custom headers** — `-H "Key: Value"` repeatable flag, curl-style parsing:
+  - Works on both `run` and `run-dist` (headers ride the distributed job payload)
+  - User-supplied `Content-Type` overrides the default; `Host` handled via wire-level override
+  - Invalid specs fail fast with actionable errors: `invalid header "X": expected "Key: Value" format`
+- **CI-friendly exit codes** — opt-in threshold gates:
+  - `--fail-above-errors N` — exit 2 if failed requests exceed N
+  - `--fail-above-p95 MS` — exit 2 if p95 latency exceeds MS milliseconds
+  - Exit code `2` (threshold violation) is distinct from `1` (config error), so pipelines can tell "my command was wrong" apart from "the service failed the gate"
+  - Fully opt-in — default behavior unchanged; full report still printed before the gate evaluates
+
 ### Fixed
+- **Memory landmine** — the jobs channel was pre-allocated with one slot per request (`make(chan Job, TotalReqs)`), reserving gigabytes for large `-n` values before a single request fired. Now bounded at `concurrency × 2`:
+  - `-n 1000000`: peak RSS 154 MB → 28 MB (measured on real binaries)
+  - Channel allocation: 64 MB → 1.5 KB per run (benchmark: 42,000× less)
+- **Latency precision** — sub-millisecond truncation eliminated:
+  - All outputs (JSON, table, CSV, quiet) now report fractional milliseconds instead of integer-truncated values that showed `p99 = 0ms` on fast targets
+  - Histogram percentiles now use linear interpolation within buckets instead of snapping to bucket upper bounds
+  - Fixed histogram misclassification of fractional-millisecond observations (1.4ms landed in the ≤1ms bucket)
+
+### Fixed (earlier in cycle)
 - **Body drain fix** — response body was not drained before closing, preventing connection reuse. Added `io.Copy(io.Discard, resp.Body)` which enables Go's connection pool to recycle TCP connections. Result: 96.7% connection reuse ratio, 45% RPS improvement, 72% memory reduction.
 - **Race condition in httptrace** — `newConn` variable accessed concurrently from httptrace callbacks; switched to `atomic.Bool`.
 
-### Added
+### Added (earlier in cycle)
 - **Connection pooling** — custom http.Transport with optimized settings:
   - MaxIdleConns: 200 (up from Go default 100)
   - MaxIdleConnsPerHost: 50 (up from Go default 2) — 25x improvement

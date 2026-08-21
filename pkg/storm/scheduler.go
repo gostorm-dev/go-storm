@@ -13,10 +13,11 @@ func (lt *LoadTester) produceJobs() {
 		}
 
 		job := Job{
-			ID:     i + 1,
-			URL:    lt.config.URL,
-			Method: lt.config.Method,
-			Body:   lt.config.Payload,
+			ID:      i + 1,
+			URL:     lt.config.URL,
+			Method:  lt.config.Method,
+			Body:    lt.config.Payload,
+			Headers: lt.config.Headers,
 		}
 
 		select {
