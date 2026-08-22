@@ -78,6 +78,7 @@ k6:
 
 ### Core
 - Concurrent workers with configurable pool size
+- **Duration mode** (`-d 5m`) — sustained load for a fixed window, graceful drain, no fake errors at the deadline
 - Rate limiting via token bucket (`-r` / `--rate`)
 - GET / POST / PUT / DELETE / PATCH / HEAD
 - Custom headers (`-H "Authorization: Bearer $TOKEN"`, repeatable)
@@ -153,6 +154,12 @@ make build
 ```bash
 # Basic load test — 1000 requests, 50 workers
 storm run -u https://example.com -n 1000 -c 50
+
+# Sustained load — run for 5 minutes instead of a request count
+storm run -u https://example.com -d 5m -c 200
+
+# Constant arrival rate — hold exactly 1000 RPS for 30 minutes
+storm run -u https://example.com -d 30m -c 100 -r 1000
 
 # Rate limited — exactly 1000 RPS
 storm run -u https://example.com -n 5000 -r 1000

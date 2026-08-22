@@ -18,24 +18,28 @@ func ms(d time.Duration) float64 {
 
 // Report combines run metadata with results for machine-readable output.
 type Report struct {
-	URL             string      `json:"url"`
-	Method          string      `json:"method"`
-	Concurrency     int         `json:"concurrency"`
-	Rate            int         `json:"rate"`
-	TotalRequests   int         `json:"total_requests"`
-	Successful      int         `json:"successful"`
-	Failed          int         `json:"failed"`
-	SuccessRate     float64     `json:"success_rate"`
-	MinResponseTime float64     `json:"min_response_time_ms"`
-	MaxResponseTime float64     `json:"max_response_time_ms"`
-	AvgResponseTime float64     `json:"avg_response_time_ms"`
-	P50             float64     `json:"p50_ms"`
-	P95             float64     `json:"p95_ms"`
-	P99             float64     `json:"p99_ms"`
-	RequestsPerSec  float64     `json:"requests_per_sec"`
-	TotalDuration   int64       `json:"total_duration_ms"`
-	StatusCodes     map[int]int `json:"status_codes"`
-	Errors          []string    `json:"errors,omitempty"`
+	URL             string  `json:"url"`
+	Method          string  `json:"method"`
+	Concurrency     int     `json:"concurrency"`
+	Rate            int     `json:"rate"`
+	TotalRequests   int     `json:"total_requests"`
+	Successful      int     `json:"successful"`
+	Failed          int     `json:"failed"`
+	SuccessRate     float64 `json:"success_rate"`
+	MinResponseTime float64 `json:"min_response_time_ms"`
+	MaxResponseTime float64 `json:"max_response_time_ms"`
+	AvgResponseTime float64 `json:"avg_response_time_ms"`
+	P50             float64 `json:"p50_ms"`
+	P95             float64 `json:"p95_ms"`
+	P99             float64 `json:"p99_ms"`
+	RequestsPerSec  float64 `json:"requests_per_sec"`
+	TotalDuration   int64   `json:"total_duration_ms"`
+	// RequestedDurationMs records the requested window for duration-mode
+	// runs (0 in count mode). Storing the request intent keeps runs
+	// comparable and reproducible.
+	RequestedDurationMs int64       `json:"requested_duration_ms"`
+	StatusCodes         map[int]int `json:"status_codes"`
+	Errors              []string    `json:"errors,omitempty"`
 }
 
 // PrintStatsReport renders a run's stats to stdout.
@@ -63,6 +67,9 @@ func PrintStatsReport(config Config, stats Stats) {
 	fmt.Printf("p95 Response: %v\n", stats.P95)
 	fmt.Printf("p99 Response: %v\n", stats.P99)
 	fmt.Printf("Requests/sec: %.2f\n", stats.RequestsPerSec)
+	if config.Duration > 0 {
+		fmt.Printf("Requested Duration: %v\n", config.Duration)
+	}
 	fmt.Printf("Total Duration: %v\n", stats.TotalDuration)
 	fmt.Println(strings.Repeat("-", 60))
 	fmt.Println("Status Code Distribution:")
@@ -91,24 +98,25 @@ func ReportJSON(config Config, stats Stats) ([]byte, error) {
 		successRate = float64(stats.Successful) / float64(stats.TotalRequests) * 100
 	}
 	report := Report{
-		URL:             config.URL,
-		Method:          config.Method,
-		Concurrency:     config.Concurrency,
-		Rate:            config.Rate,
-		TotalRequests:   stats.TotalRequests,
-		Successful:      stats.Successful,
-		Failed:          stats.Failed,
-		SuccessRate:     successRate,
-		MinResponseTime: ms(stats.MinResponseTime),
-		MaxResponseTime: ms(stats.MaxResponseTime),
-		AvgResponseTime: ms(stats.AvgResponseTime),
-		P50:             ms(stats.P50),
-		P95:             ms(stats.P95),
-		P99:             ms(stats.P99),
-		RequestsPerSec:  stats.RequestsPerSec,
-		TotalDuration:   stats.TotalDuration.Milliseconds(),
-		StatusCodes:     stats.StatusCodes,
-		Errors:          stats.Errors,
+		URL:                 config.URL,
+		Method:              config.Method,
+		Concurrency:         config.Concurrency,
+		Rate:                config.Rate,
+		TotalRequests:       stats.TotalRequests,
+		Successful:          stats.Successful,
+		Failed:              stats.Failed,
+		SuccessRate:         successRate,
+		MinResponseTime:     ms(stats.MinResponseTime),
+		MaxResponseTime:     ms(stats.MaxResponseTime),
+		AvgResponseTime:     ms(stats.AvgResponseTime),
+		P50:                 ms(stats.P50),
+		P95:                 ms(stats.P95),
+		P99:                 ms(stats.P99),
+		RequestsPerSec:      stats.RequestsPerSec,
+		TotalDuration:       stats.TotalDuration.Milliseconds(),
+		RequestedDurationMs: config.Duration.Milliseconds(),
+		StatusCodes:         stats.StatusCodes,
+		Errors:              stats.Errors,
 	}
 	return json.MarshalIndent(report, "", "  ")
 }
@@ -178,6 +186,9 @@ func PrintStatsTable(config Config, stats Stats) {
 	fmt.Printf("  %s\n", strings.Repeat("─", L+2)+"┼"+strings.Repeat("─", R+2))
 
 	fmt.Println(row("RPS", fmt.Sprintf("%.2f", stats.RequestsPerSec)))
+	if config.Duration > 0 {
+		fmt.Println(row("Requested", config.Duration.String()))
+	}
 	fmt.Println(row("Duration", fmt.Sprintf("%.2f s", stats.TotalDuration.Seconds())))
 	fmt.Printf("  %s\n", strings.Repeat("─", L+2)+"┴"+strings.Repeat("─", R+2))
 
@@ -218,6 +229,9 @@ func PrintStatsCSV(config Config, stats Stats) {
 	fmt.Printf("min_ms,%.2f\n", ms(stats.MinResponseTime))
 	fmt.Printf("max_ms,%.2f\n", ms(stats.MaxResponseTime))
 	fmt.Printf("rps,%.2f\n", stats.RequestsPerSec)
+	if config.Duration > 0 {
+		fmt.Printf("requested_duration_s,%.2f\n", config.Duration.Seconds())
+	}
 	fmt.Printf("duration_s,%.2f\n", stats.TotalDuration.Seconds())
 	for code, count := range stats.StatusCodes {
 		fmt.Printf("status_%d,%d\n", code, count)
@@ -225,12 +239,14 @@ func PrintStatsCSV(config Config, stats Stats) {
 }
 
 // PrintStatsQuiet renders only numbers, comma-separated (for CI/CD).
+// In duration mode a requested-seconds field is appended as the last
+// column; count-mode output stays byte-identical to previous versions.
 func PrintStatsQuiet(config Config, stats Stats) {
 	successRate := 0.0
 	if stats.TotalRequests > 0 {
 		successRate = float64(stats.Successful) / float64(stats.TotalRequests) * 100
 	}
-	fmt.Printf("%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
+	line := fmt.Sprintf("%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
 		stats.TotalRequests,
 		stats.Successful,
 		stats.Failed,
@@ -241,6 +257,10 @@ func PrintStatsQuiet(config Config, stats Stats) {
 		ms(stats.P99),
 		stats.RequestsPerSec,
 	)
+	if config.Duration > 0 {
+		line += fmt.Sprintf(",%.2f", config.Duration.Seconds())
+	}
+	fmt.Println(line)
 }
 
 func truncate(s string, max int) string {

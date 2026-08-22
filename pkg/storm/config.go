@@ -21,6 +21,11 @@ type Config struct {
 	Payload     []byte
 	Rate        int
 
+	// Duration runs the test for a wall-clock window instead of a request
+	// count. Zero means count mode (TotalReqs governs).
+	// Exactly one of Duration / TotalReqs must be set.
+	Duration time.Duration
+
 	// Headers applied to every request. User-supplied headers always win
 	// over engine defaults such as Content-Type.
 	Headers http.Header
@@ -31,7 +36,7 @@ type Config struct {
 
 // Job represents one HTTP request to fire.
 type Job struct {
-	ID      int
+	ID      int64
 	URL     string
 	Method  string
 	Body    []byte
@@ -62,7 +67,7 @@ const jobBufferFactor = 2
 
 // Result captures response metrics for a single request.
 type Result struct {
-	JobID      int
+	JobID      int64
 	Method     string
 	StatusCode int
 	Duration   time.Duration
@@ -87,13 +92,30 @@ type Stats struct {
 	Errors          []string
 }
 
+// minDuration is the smallest meaningful duration-mode window. Below this,
+// startup transients (connection setup, TLS handshakes, scheduler warm-up)
+// dominate the stats and the results mislead more than inform.
+const minDuration = time.Second
+
 // Validate checks the config before a run starts.
 func (c Config) Validate() error {
 	if c.Rate < 0 {
 		return fmt.Errorf("rate cannot be negative, got %d", c.Rate)
 	}
-	if c.TotalReqs <= 0 {
-		return fmt.Errorf("total requests must be positive, got %d", c.TotalReqs)
+	switch {
+	case c.Duration < 0:
+		return fmt.Errorf("duration cannot be negative, got %s", c.Duration)
+	case c.Duration > 0 && c.TotalReqs > 0:
+		return fmt.Errorf(
+			"--requests (-n) and --duration (-d) are mutually exclusive: "+
+				"got n=%d AND d=%s — pick one workload definition",
+			c.TotalReqs, c.Duration)
+	case c.Duration == 0 && c.TotalReqs <= 0:
+		return fmt.Errorf("no workload defined: set --requests (-n) OR --duration (-d)")
+	case c.Duration > 0 && c.Duration < minDuration:
+		return fmt.Errorf(
+			"duration %s too short — minimum is %v for meaningful results",
+			c.Duration, minDuration)
 	}
 	if c.Concurrency <= 0 {
 		return fmt.Errorf("concurrency must be positive, got %d", c.Concurrency)

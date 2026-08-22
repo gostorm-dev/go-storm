@@ -73,7 +73,7 @@ func TestCollectorMatchesAggregate(t *testing.T) {
 	results := make([]Result, 100)
 	for i := range results {
 		results[i] = Result{
-			JobID:      i + 1,
+			JobID:      int64(i + 1),
 			StatusCode: 200,
 			Duration:   time.Duration(i+1) * time.Millisecond,
 		}

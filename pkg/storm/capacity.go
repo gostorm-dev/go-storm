@@ -80,7 +80,7 @@ func EstimateCapacity(
 
 	// Feed jobs
 	for i := 0; i < sampleSize; i++ {
-		jobs <- Job{ID: i, URL: url, Method: method}
+		jobs <- Job{ID: int64(i), URL: url, Method: method}
 	}
 	close(jobs)
 

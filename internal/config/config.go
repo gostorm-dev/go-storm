@@ -19,7 +19,7 @@ type Options struct {
 	Output string
 }
 
-func Build(url, method, body string, total, concurrency, timeout, rate int) Options {
+func Build(url, method, body string, total, concurrency, timeout, rate int, duration time.Duration) Options {
 	var payload []byte
 	switch {
 	case body != "":
@@ -37,6 +37,7 @@ func Build(url, method, body string, total, concurrency, timeout, rate int) Opti
 			Method:      method,
 			Payload:     payload,
 			Rate:        rate,
+			Duration:    duration,
 		},
 	}
 }

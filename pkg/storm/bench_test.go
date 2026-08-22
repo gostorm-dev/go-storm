@@ -14,7 +14,7 @@ func makeResults(n int) []Result {
 	results := make([]Result, n)
 	for i := range results {
 		results[i] = Result{
-			JobID:      i + 1,
+			JobID:      int64(i + 1),
 			Method:     "GET",
 			StatusCode: 200,
 			Duration:   time.Duration(i%1000+1) * time.Millisecond,

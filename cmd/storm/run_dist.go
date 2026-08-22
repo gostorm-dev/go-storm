@@ -17,7 +17,13 @@ import (
 	"github.com/hariomop12/go-storm/pkg/storm"
 )
 
-var waitAgents int
+// distTotal is intentionally separate from run.go's total: pflag writes
+// flag defaults into the bound variable at registration time, so sharing
+// one variable across commands with different defaults silently corrupts it.
+var (
+	waitAgents int
+	distTotal  int
+)
 
 var runDistCmd = &cobra.Command{
 	Use:   "run-dist",
@@ -37,8 +43,8 @@ then run this command once.`,
   # Save report and show agent breakdown
   storm run-dist -u https://example.com -n 10000 --format json --output report.json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if total <= 0 {
-			return fmt.Errorf("total requests must be positive, got %d", total)
+		if distTotal <= 0 {
+			return fmt.Errorf("requests must be greater than 0 — got %d", distTotal)
 		}
 
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -75,16 +81,16 @@ then run this command once.`,
 
 		color.Cyan("Distributed Load Test")
 		fmt.Printf("Target: %s\n", cfg.URL)
-		fmt.Printf("Total: %d requests\n", total)
+		fmt.Printf("Total: %d requests\n", distTotal)
 		fmt.Printf("Queue: %s\n", redisAddr)
 		if waitAgents > 0 {
 			color.Yellow("Waiting for %d agents...", waitAgents)
 		}
 
-		jobs := make([]storm.Job, total)
+		jobs := make([]storm.Job, distTotal)
 		for i := range jobs {
 			jobs[i] = storm.Job{
-				ID:      i + 1,
+				ID:      int64(i + 1),
 				URL:     cfg.URL,
 				Method:  cfg.Method,
 				Body:    cfg.Payload,
@@ -107,7 +113,7 @@ then run this command once.`,
 					case <-ticker.C:
 						n, err := rdb.ResultsCount(ctx, runID)
 						if err == nil {
-							fmt.Printf("\rResults: %d/%d", n, total)
+							fmt.Printf("\rResults: %d/%d", n, distTotal)
 						}
 					}
 				}
@@ -187,7 +193,7 @@ func printAgentBreakdown(breakdown []dist.AgentStats) {
 
 func init() {
 	runDistCmd.Flags().StringVarP(&url, "url", "u", "", "Target URL (required)")
-	runDistCmd.Flags().IntVarP(&total, "requests", "n", 100, "Total requests to send")
+	runDistCmd.Flags().IntVarP(&distTotal, "requests", "n", 100, "Total requests to send")
 	runDistCmd.Flags().StringVarP(&method, "method", "m", "GET", "HTTP method: GET, POST, PUT, DELETE")
 	runDistCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "Request timeout in seconds")
 	runDistCmd.Flags().StringVarP(&body, "body", "b", "", "Request body (for POST/PUT)")

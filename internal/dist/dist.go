@@ -167,7 +167,7 @@ func (r *Redis) Agents(ctx context.Context) ([]AgentInfo, error) {
 // distResult is the wire format for results pushed to Redis. It carries the
 // error message and the agent ID as strings so JSON survives the round trip.
 type distResult struct {
-	JobID      int           `json:"job_id"`
+	JobID      int64         `json:"job_id"`
 	AgentID    string        `json:"agent_id"`
 	StatusCode int           `json:"status_code"`
 	Duration   time.Duration `json:"duration_ns"`

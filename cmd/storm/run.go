@@ -23,6 +23,7 @@ import (
 var (
 	url            string
 	total          int
+	duration       time.Duration
 	concurrency    int
 	method         string
 	timeout        int
@@ -48,10 +49,17 @@ var (
 var runCmd = &cobra.Command{
 	Use:   "run",
 	Short: "Run a load test against a URL",
-	Long: `Run sends N requests to a URL using a pool of concurrent workers.
-Optionally throttle throughput with --rate, and export results as JSON.`,
+	Long: `Run sends N requests — or runs for a fixed duration — against a URL
+using a pool of concurrent workers. Optionally throttle throughput with
+--rate, and export results as JSON.`,
 	Example: `  # Basic load test
   storm run -u https://example.com -n 1000 -c 50
+
+  # Sustained load for 5 minutes
+  storm run -u https://example.com -d 5m -c 200
+
+  # Constant arrival rate: 1000 RPS for 30 minutes
+  storm run -u https://example.com -d 30m -c 100 -r 1000
 
   # Rate limited test (1000 RPS)
   storm run -u https://example.com -n 5000 -c 100 -r 1000
@@ -81,8 +89,14 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 		if !validMethods[method] {
 			return fmt.Errorf("invalid HTTP method '%s' — valid: GET, POST, PUT, DELETE, PATCH, HEAD", method)
 		}
-		if total <= 0 {
-			return fmt.Errorf("requests must be greater than 0 — got %d", total)
+		switch {
+		case total > 0 && duration > 0:
+			return fmt.Errorf(
+				"--requests (-n) and --duration (-d) are mutually exclusive: "+
+					"got n=%d AND d=%s — pick one workload definition",
+				total, duration)
+		case total <= 0 && duration <= 0:
+			return fmt.Errorf("no workload defined: set --requests (-n) OR --duration (-d)")
 		}
 		if concurrency <= 0 {
 			return fmt.Errorf("concurrency must be greater than 0 — got %d", concurrency)
@@ -93,7 +107,7 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		opts := config.Build(url, method, body, total, concurrency, timeout, rate)
+		opts := config.Build(url, method, body, total, concurrency, timeout, rate, duration)
 		opts.Format = format
 		opts.Output = output
 
@@ -156,7 +170,11 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 			dim := color.New(color.FgHiBlack).SprintFunc()
 
 			fmt.Printf("%s %s\n", bold("Target:"), cfg.URL)
-			fmt.Printf("%s %s\n", bold("Requests:"), fmt.Sprintf("%d", cfg.TotalReqs))
+			if cfg.Duration > 0 {
+				fmt.Printf("%s %s\n", bold("Duration:"), cfg.Duration)
+			} else {
+				fmt.Printf("%s %s\n", bold("Requests:"), fmt.Sprintf("%d", cfg.TotalReqs))
+			}
 			fmt.Printf("%s %s\n", bold("Workers:"), fmt.Sprintf("%d", cfg.Concurrency))
 			if cfg.Rate > 0 {
 				fmt.Printf("%s %s\n", bold("Rate:"), fmt.Sprintf("%d req/sec", cfg.Rate))
@@ -201,21 +219,35 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 		var bar *progressbar.ProgressBar
 		var done chan struct{}
 		if opts.Format == "text" || opts.Format == "" {
-			bar = progressbar.NewOptions64(int64(cfg.TotalReqs),
+			// Duration mode tracks elapsed time; count mode tracks completed
+			// requests. The ms-granularity max keeps the percentage smooth.
+			timeMode := cfg.Duration > 0
+			barOpts := []progressbar.Option{
 				progressbar.OptionSetDescription("Running"),
 				progressbar.OptionSetWidth(40),
-				progressbar.OptionShowCount(),
 				progressbar.OptionSetRenderBlankState(true),
-			)
+			}
+			if !timeMode {
+				barOpts = append(barOpts, progressbar.OptionShowCount())
+			}
+
+			var barMax int64
+			if timeMode {
+				barMax = int64(cfg.Duration / time.Millisecond)
+			} else {
+				barMax = int64(cfg.TotalReqs)
+			}
+			bar = progressbar.NewOptions64(barMax, barOpts...)
 
 			// The board-watcher goroutine: peeks at the counter every 500ms
 			done = make(chan struct{})
+			start := time.Now()
 			go func() {
 				ticker := time.NewTicker(500 * time.Millisecond)
 				defer ticker.Stop()
 
 				prevCount := int64(0)
-				prevTime := time.Now()
+				prevTime := start
 
 				for {
 					select {
@@ -226,8 +258,17 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 						rps := float64(count-prevCount) / now.Sub(prevTime).Seconds()
 						prevCount, prevTime = count, now
 
+						if timeMode {
+							elapsed := now.Sub(start)
+							if elapsed > cfg.Duration {
+								// Cap at 100% during the graceful drain tail.
+								elapsed = cfg.Duration
+							}
+							bar.Set64(int64(elapsed / time.Millisecond))
+						} else {
+							bar.Set64(count)
+						}
 						bar.Describe(color.GreenString("%.0f req/s", rps))
-						bar.Set64(count)
 					}
 				}
 			}()
@@ -245,7 +286,11 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 		// Stop the watcher and finalize the bar
 		if bar != nil {
 			close(done)
-			bar.Set64(tester.Completed())
+			if cfg.Duration > 0 {
+				bar.Set64(int64(cfg.Duration / time.Millisecond))
+			} else {
+				bar.Set64(tester.Completed())
+			}
 			bar.Finish()
 			fmt.Println()
 		}
@@ -302,7 +347,8 @@ Optionally throttle throughput with --rate, and export results as JSON.`,
 
 func init() {
 	runCmd.Flags().StringVarP(&url, "url", "u", "", "Target URL (required)")
-	runCmd.Flags().IntVarP(&total, "requests", "n", 100, "Total requests to send")
+	runCmd.Flags().IntVarP(&total, "requests", "n", 0, "Total requests to send (mutually exclusive with --duration)")
+	runCmd.Flags().DurationVarP(&duration, "duration", "d", 0, "Test duration: 30s, 5m, 1h (mutually exclusive with --requests)")
 	runCmd.Flags().IntVarP(&concurrency, "concurrency", "c", 10, "Concurrency level (parallel workers)")
 	runCmd.Flags().StringVarP(&method, "method", "m", "GET", "HTTP method: GET, POST, PUT, DELETE")
 	runCmd.Flags().IntVarP(&timeout, "timeout", "t", 10, "Request timeout in seconds")

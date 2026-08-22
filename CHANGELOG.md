@@ -36,6 +36,14 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Duration-based load mode** — `-d/--duration` runs the test for a wall-clock window instead of a request count:
+  - Go duration strings: `-d 30s`, `-d 5m`, `-d 1h30m`
+  - Composes with `--rate` for the primary use case: constant arrival rate for a fixed window (`-r 1000 -d 30m`)
+  - **Graceful deadline drain** — in-flight requests finish naturally at the deadline and are counted; no synthetic errors pollute latency or failure stats. Run tail is bounded by the per-request timeout (`-t`)
+  - Time-based progress bar (elapsed/total) with live req/s; report shows both requested and actual duration so drift is visible, never hidden
+  - `requested_duration_ms` added to JSON reports (additive, non-breaking); quiet format appends a requested-seconds column in duration mode only
+  - Minimum window is 1s — below that, startup transients dominate and results mislead
+- **Brand banner on test start** — shown for human-readable formats (`text`, `table`) only; `json`/`csv`/`quiet` output stays machine-clean
 - **Custom headers** — `-H "Key: Value"` repeatable flag, curl-style parsing:
   - Works on both `run` and `run-dist` (headers ride the distributed job payload)
   - User-supplied `Content-Type` overrides the default; `Host` handled via wire-level override
@@ -45,6 +53,15 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
   - `--fail-above-p95 MS` — exit 2 if p95 latency exceeds MS milliseconds
   - Exit code `2` (threshold violation) is distinct from `1` (config error), so pipelines can tell "my command was wrong" apart from "the service failed the gate"
   - Fully opt-in — default behavior unchanged; full report still printed before the gate evaluates
+
+### Changed
+- **`-n/--requests` default removed (breaking-ish)** — `-n` no longer defaults to 100. Exactly one of `-n` or `-d` is now required; omitting both produces an actionable error:
+  ```
+  Error: no workload defined: set --requests (-n) OR --duration (-d)
+  ```
+  Scripts relying on the implicit `-n 100` must pass it explicitly. Specifying both flags is also a validation error.
+- **`Job.ID` / `Result.JobID` widened to `int64`** — duration mode can produce unbounded request counts; `int` would overflow on 32-bit platforms during long soaks. Library users referencing these fields need a type adjustment.
+- Fixed a latent flag-registration bug: `run` and `run-dist` shared one package-level `total` variable, and pflag writes defaults into the bound variable at registration time — whichever command's init() ran last won. Now each command owns its variable.
 
 ### Fixed
 - **Memory landmine** — the jobs channel was pre-allocated with one slot per request (`make(chan Job, TotalReqs)`), reserving gigabytes for large `-n` values before a single request fired. Now bounded at `concurrency × 2`:
