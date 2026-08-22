@@ -90,8 +90,10 @@ for run in warmup 1 2 3; do
 done
 for run in warmup 1 2 3; do
   z=60s; [ "$run" = warmup ] && z=10s
+  start_sar "gen_k6_S2_run$run"
   SCEN=s2 k6 run --quiet -u 100 --duration "$z" --summary-export "$RAW/k6_S2_run$run.json" "$DIR/k6_script.js" > "$RAW/k6_S2_run$run.out" 2>&1 || \
   SCEN=s2 k6 run --quiet -u 100 -d "$z" --summary-export "$RAW/k6_S2_run$run.json" "$DIR/k6_script.js" > "$RAW/k6_S2_run$run.out" 2>&1
+  stop_sar "gen_k6_S2_run$run"
   log "k6_S2_run$run done"
   [ "$run" != warmup ] && emit k6 S2 "$run" "$(p_k6 "$RAW/k6_S2_run$run.json")"
   cooldown
@@ -123,7 +125,9 @@ for run in warmup 1 2 3; do
   cooldown
 done
 for run in warmup 1 2 3; do
+  start_sar "gen_k6_S3_run$run"
   SCEN=s3 k6 run --quiet --summary-export "$RAW/k6_S3_run$run.json" "$DIR/k6_script.js" > "$RAW/k6_S3_run$run.out" 2>&1
+  stop_sar "gen_k6_S3_run$run"
   log "k6_S3_run$run done"
   [ "$run" != warmup ] && emit k6 S3 "$run" "$(p_k6 "$RAW/k6_S3_run$run.json")"
   cooldown
@@ -147,7 +151,9 @@ for run in warmup 1 2 3; do
   cooldown
 done
 for run in warmup 1 2 3; do
+  start_sar "gen_k6_S4_run$run"
   SCEN=s4 k6 run --quiet -u 1000 -d 30s --summary-export "$RAW/k6_S4_run$run.json" "$DIR/k6_script.js" > "$RAW/k6_S4_run$run.out" 2>&1
+  stop_sar "gen_k6_S4_run$run"
   log "k6_S4_run$run done"
   [ "$run" != warmup ] && emit k6 S4 "$run" "$(p_k6 "$RAW/k6_S4_run$run.json")"
   cooldown
