@@ -14,7 +14,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/hariomop12/go-storm/pkg/storm"
+	"github.com/gostorm-dev/go-storm/pkg/storm"
 )
 
 const (

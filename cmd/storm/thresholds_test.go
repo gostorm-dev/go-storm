@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hariomop12/go-storm/pkg/storm"
+	"github.com/gostorm-dev/go-storm/pkg/storm"
 )
 
 func TestEvaluateThresholds(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/hariomop12/go-storm/pkg/storm"
+	"github.com/gostorm-dev/go-storm/pkg/storm"
 )
 
 var (

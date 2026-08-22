@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/hariomop12/go-storm/pkg/storm"
+	"github.com/gostorm-dev/go-storm/pkg/storm"
 )
 
 var reportCmd = &cobra.Command{

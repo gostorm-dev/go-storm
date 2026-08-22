@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hariomop12/go-storm/internal/transport"
+	"github.com/gostorm-dev/go-storm/internal/transport"
 	"golang.org/x/time/rate"
 )
 

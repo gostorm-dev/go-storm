@@ -14,10 +14,10 @@ import (
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 
-	"github.com/hariomop12/go-storm/internal/config"
-	"github.com/hariomop12/go-storm/internal/metrics"
-	"github.com/hariomop12/go-storm/internal/transport"
-	"github.com/hariomop12/go-storm/pkg/storm"
+	"github.com/gostorm-dev/go-storm/internal/config"
+	"github.com/gostorm-dev/go-storm/internal/metrics"
+	"github.com/gostorm-dev/go-storm/internal/transport"
+	"github.com/gostorm-dev/go-storm/pkg/storm"
 )
 
 var (

@@ -6,6 +6,19 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.5.2] — 2026-08-22
+
+### Changed
+- **Module path renamed** to `github.com/gostorm-dev/go-storm` — now matches the README install command, badges, and the published org repository. All internal imports updated; no behavioral change.
+- **License documentation corrected** — README now references Apache License 2.0, matching the actual LICENSE file (was incorrectly labeled MIT).
+- CONTRIBUTING clone URL points to the org repository.
+
+### Fixed
+- **go.mod repaired** via `go mod tidy` — direct dependencies (cobra, go-redis, prometheus client, progressbar, color, x/time) are no longer mislabeled `// indirect`.
+- `cmd/storm/banner.go` formatted with gofmt — the CI formatting gate passes again.
+
+---
+
 ## [0.5.0] — 2026-08-20
 
 ### Added

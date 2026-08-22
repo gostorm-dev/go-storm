@@ -5,7 +5,7 @@ Thanks for taking the time to contribute!
 ## Getting started
 
 ```bash
-git clone https://github.com/hariomop12/go-storm.git
+git clone https://github.com/gostorm-dev/go-storm.git
 cd go-storm
 go build ./cmd/storm
 ```

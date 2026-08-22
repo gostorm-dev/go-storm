@@ -13,7 +13,7 @@ A high-performance HTTP load testing engine written in Go. Unlike other tools, g
 
 [![CI](https://github.com/gostorm-dev/go-storm/actions/workflows/ci.yml/badge.svg)](https://github.com/gostorm-dev/go-storm/actions)
 [![Go Report](https://goreportcard.com/badge/github.com/gostorm-dev/go-storm)](https://goreportcard.com/report/github.com/gostorm-dev/go-storm)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 ---
 
@@ -499,7 +499,7 @@ go test -bench=. -benchmem ./...
 
 ## License
 
-Released under the [MIT License](LICENSE).
+Released under the [Apache License 2.0](LICENSE).
 
 ## Contributing
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hariomop12/go-storm/pkg/storm"
+	"github.com/gostorm-dev/go-storm/pkg/storm"
 )
 
 // Threshold limits for CI gate evaluation. Negative values mean disabled.

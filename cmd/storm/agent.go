@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/hariomop12/go-storm/internal/dist"
-	"github.com/hariomop12/go-storm/internal/metrics"
-	"github.com/hariomop12/go-storm/pkg/storm"
+	"github.com/gostorm-dev/go-storm/internal/dist"
+	"github.com/gostorm-dev/go-storm/internal/metrics"
+	"github.com/gostorm-dev/go-storm/pkg/storm"
 	"github.com/spf13/cobra"
 )
 

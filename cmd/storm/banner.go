@@ -7,7 +7,6 @@ import (
 	"github.com/fatih/color"
 )
 
-
 func runeCellWidth(r rune) int {
 	if r == '⚡' {
 		return 2

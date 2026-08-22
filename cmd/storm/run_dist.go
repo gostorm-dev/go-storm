@@ -13,8 +13,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
-	"github.com/hariomop12/go-storm/internal/dist"
-	"github.com/hariomop12/go-storm/pkg/storm"
+	"github.com/gostorm-dev/go-storm/internal/dist"
+	"github.com/gostorm-dev/go-storm/pkg/storm"
 )
 
 // distTotal is intentionally separate from run.go's total: pflag writes

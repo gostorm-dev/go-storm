@@ -6,7 +6,7 @@ package config
 import (
 	"time"
 
-	"github.com/hariomop12/go-storm/pkg/storm"
+	"github.com/gostorm-dev/go-storm/pkg/storm"
 )
 
 // ParseFlags reads the CLI flags and returns a storm.Config.
