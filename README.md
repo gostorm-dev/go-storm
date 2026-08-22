@@ -45,17 +45,26 @@ Reproducible lab: 2 × c6i.large (same AZ, private-IP traffic), warmup + 3 runs,
 median reported, `sar` monitoring on both machines. Full methodology and raw
 numbers in [**BENCHMARKS.md**](BENCHMARKS.md) · suite in [`bench/`](bench/).
 
-### go-storm vs k6 (published round, Aug 2026)
+### Latest round (v0.5.3 build)
+
+| Scenario | Result |
+|----------|--------|
+| **Rate accuracy** (`-r 5000 -d 30s`) | **5000.00 RPS — exact dispatch**, p99 0.55ms at 19% generator CPU (k6: p99 2.99ms @ 37% CPU) |
+| Sustained soak / ceiling | ⚠️ **known regression in v0.5.3** (−54–57% vs previous build, GC pressure) — caught by our own suite within hours of release; fix targeted v0.5.4 |
+
+Honest scoreboard: **wrk still wins raw throughput** (C + epoll). We publish our
+losses and regressions too — that is the point of
+["The Load Tester That Tells Truth"](BENCHMARKS.md).
+
+<details>
+<summary>Round 1 (pre-v0.5.3 build): go-storm vs k6</summary>
 
 | Scenario | go-storm | k6 | Delta |
 |----------|----------|-----|--------|
 | Sustained soak (60s, c=100) | **35,870 RPS**, p99 9.7ms | 24,332 RPS, p99 16.0ms | **+47% throughput, −39% p99** |
 | Generator ceiling (c=1000, 30s) | **31,198 RPS** | 18,154 RPS | **+72% throughput** |
 
-Honest scoreboard from the same round: **wrk wins raw throughput** (C + epoll —
-65K RPS at half the CPU). We publish our losses too; that is the point of
-["The Load Tester That Tells Truth"](BENCHMARKS.md#honest-findings-from-this-round).
-Rate-accuracy bug found by this suite (+3.3%) is being fixed in v0.6.1.
+</details>
 
 <details>
 <summary>Early internal tests (single t3.medium, superseded by the lab above)</summary>

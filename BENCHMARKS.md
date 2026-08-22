@@ -1,84 +1,109 @@
 # BENCHMARKS — go-storm vs k6 vs wrk vs hey vs vegeta
 
-> First published run: **2026-08-22** · methodology in [`bench/README.md`](bench/README.md)
+> Two rounds published so far, same day, same lab. Methodology in [`bench/README.md`](bench/README.md).
 >
-> Philosophy: numbers are reported as measured. Losses are shown, not hidden.
-> A benchmark you cannot reproduce is a benchmark you should not trust.
+> Philosophy: numbers are reported as measured. Losses and regressions are shown,
+> not hidden. A benchmark you cannot reproduce is a benchmark you should not trust.
 
-## Environment
+## ⚠️ Current status (read first)
+
+**v0.5.3 has a known performance regression on sustained unlimited-concurrency load**
+(S2 soak −57%, S4 ceiling −54% vs the previous build), caused by allocation pressure /
+GC thrash (~662 GC cycles per 30s observed via go-storm's own generator health report).
+Short bursts (S1) and rate-limited runs (S3) are unaffected — S3 numbers below are a
+record for this project. Fix targeted for v0.5.4.
+
+The regression was caught **by this suite within hours of release**, before any user report.
+That is exactly what the suite exists for.
+
+---
+
+## Environment (both rounds)
 
 | | |
 |---|---|
 | Machines | 2 × AWS c6i.large (2 vCPU), same AZ (ap-south-1a) |
 | Network | Private IPs between generator and target |
 | Target | chi-based HTTP server (Go), identical for all tools |
-| go-storm | built from commit `e046a77` |
-| Competitors | wrk 4.1.0 · k6 v2.2.0 · hey (latest, Aug 2026) · vegeta v12.13.0 |
-| Protocol | warmup + 3 measured runs per scenario → median; 10s cooldown; sar on both machines |
+| Protocol | warmup + 3 measured runs per scenario → median; 10s cooldown; `sar` on both machines |
 
-## Results (median of 3)
+---
 
-### S1 — Burst: 100k requests, c=100
-| Tool | RPS | p50 | p95 | p99 | Errors |
+# Round 2 — 2026-08-22 · go-storm v0.5.3 (commit `eb428d7`)
+
+### Headline: rate-overshoot fix verified ✅
+
+`-r 5000 -d 30s` now dispatches **exactly 150,000 requests** (Round 1 sent 155,000).
+Median achieved across 3 runs: **5000.00 RPS (−0.000%)**.
+
+| Tool | Achieved RPS | Deviation | p50 | p95 | p99 | Gen CPU% |
+|---|---|---|---|---|---|---|
+| **go-storm** | **5000.00** | −0.000% | 0.185ms | 0.257ms | **0.55ms** | **19.0** |
+| k6 | 4999.86 | −0.003% | 0.166ms | 0.343ms | 2.99ms | 37.0 |
+| hey | 4999.04 | −0.02% | 0.9ms | 1.9ms | 2.3ms | 11.6 |
+| vegeta | 5000 | −0.00%† | 192ms† | 275ms† | 374ms† | 17.8 |
+
+Rate accuracy is now at parity with k6 — with **5× better tail latency at roughly half
+the generator CPU**. This scenario is go-storm's home turf again.
+
+### Other scenarios (median of 3)
+
+| Scenario | go-storm | k6 | wrk | hey | vegeta |
 |---|---|---|---|---|---|
-| hey | **42,887** 👑 | 2.0ms | 5.3ms | 7.2ms | 0 |
-| go-storm | 35,986 | 2.66ms | 7.55ms | 9.70ms | 0 |
+| S1 burst n=100k c=100 | 37,044 ↑ | n/a | n/a | **44,505** | n/a |
+| S2 soak 60s c=100 ⚠️ | 15,351 | 25,512 | **66,148** | 46,942 | 34,503 |
+| S4 ceiling c=1000 30s ⚠️ | 14,420 | 18,545 | **63,023** | 40,291 | 30,774 |
 
-*(wrk/k6/vegeta excluded: no count mode — feature gap, documented)*
+⚠️ = affected by the v0.5.3 sustained-load regression described above.
+↑ = improvement over Round 1 (+3% throughput, p50 2.66→2.06ms).
+wrk latency capture worked this round: 66K RPS at p50 1.38ms / p99 ~4.0ms using only ~45% CPU — still the raw-efficiency reference.
 
-### S2 — Sustained soak: 60s, c=100
-| Tool | RPS | p50 | p95 | p99 | Gen CPU% |
+### Regression evidence (from go-storm's own health report, 30s diagnostic run)
+
+```
+Achieved RPS:     17498            (expected ≈35k on this hardware)
+CPU Usage:        89.8%
+GC Cycles:        662              ← 22 GC cycles/second
+Verdict:          GENERATOR UNDER PRESSURE
+Recommendation:   High GC pressure — reduce allocation rate or concurrency
+```
+
+Suspects: hot-path allocations introduced with the log-linear histogram /
+scheduler restructuring in v0.5.3 under sustained dispatch. Investigation open → v0.5.4.
+
+---
+
+# Round 1 — 2026-08-22 · pre-v0.5.3 build (commit `e046a77`)
+
+### Results (median of 3)
+
+| Scenario | wrk | hey | go-storm | vegeta | k6 |
 |---|---|---|---|---|---|
-| wrk | **65,621** 👑 | n/a* | n/a* | n/a* | 48.4 |
-| hey | 44,237 | 2.0ms | 5.0ms | 6.3ms | 98.2 |
-| **go-storm** | **35,870** | 2.65ms | 7.52ms | **9.75ms** | 97.8 |
-| k6 | 24,332 | 3.42ms | 9.48ms | 16.03ms | n/a* |
+| S1 burst 100k | – | **42,887** 👑 | 35,986 | – | – |
+| S2 soak 60s | **65,621** 👑 | 44,235 | 35,870 | 32,887* | 24,332 |
+| S3 rate 5000/s | n/a | 4989.9 | **5166.4** ⚠️ bug | 5000 | **4999.8** 👑 |
+| S4 ceiling c=1000 | **60,520** 👑 | 38,862 | 31,198 | 30,696 | 18,154 |
 
-*\*known capture gaps this round — see Known Gaps below*
-
-### S3 — Rate accuracy: target 5000 req/s for 30s
-| Tool | Achieved RPS | Deviation | Verdict |
-|---|---|---|---|
-| k6 | 4999.8 | −0.005% | 👑 perfect |
-| hey | 4990.0 | −0.02% | excellent |
-| **go-storm** | **5166.4** | **+3.33%** | ⚠️ known bug, fix targeted v0.6.1 |
-
-### S4 — Generator ceiling: c=1000, 30s
-| Tool | RPS | p50 | p99 | Gen CPU% |
-|---|---|---|---|---|
-| wrk | **60,520** 👑 | n/a* | n/a* | 41.3 |
-| hey | 38,862 | 24.5ms | 48.8ms | 96.0 |
-| **go-storm** | **31,198** | 32.6ms | 96.9ms | 96.3 |
-| vegeta | 30,696 | 23,590ms† | 46,528ms† | 96.5 |
-| k6 | 18,154 | 46.0ms | 147.6ms | n/a* |
-
-### Head-to-head: go-storm vs k6
-- S2 soak: **+47.4% throughput**, p99 39% lower
-- S4 ceiling: **+71.8% throughput**
+### Head-to-head vs k6 (that round)
+S2 soak: **+47.4% throughput**, p99 39% lower · S4 ceiling: **+71.8% throughput**
 
 ### Efficiency (S2: RPS per generator CPU point)
 ```
-wrk     1356   ← C + epoll; the raw-speed reference
-hey      450
-go-storm 367
-vegeta   341
+wrk     1356      hey      450      go-storm 367      vegeta   341
 ```
 
-## Honest findings from this round
+### Findings that drove changes
+1. Rate overshoot bug discovered (`-r 5000` → exactly +5000 requests every run) → fixed in v0.5.3, verified in Round 2.
+2. chiserver never broke even at c=1000 (0% errors): real server-breaking-point tests need a heavier endpoint.
+3. wrk percentile output was not captured (flag omitted) → fixed for Round 2.
 
-1. **wrk wins raw throughput everywhere it runs.** It is C with epoll and decades of tuning.
-   We publish that because pretending otherwise would make every other number suspicious.
-2. **go-storm beats k6 on throughput AND tail latency** in every shared scenario.
-3. **We found our own bug:** `-r 5000 -d 30s` sends exactly 155,000 requests instead of
-   150,000 (+3.33%, deterministic across runs). Fix targeted for v0.6.1.
-4. The target server did not break even at c=1000 (0% errors, all tools):
-   S5 needs a heavier endpoint to find real server limits. Generator-side ceilings were hit first.
+---
 
-## Known gaps in this round
+## Open items
 
-- wrk percentile output not captured (`--latency` flag omitted; added to suite after this run)
-- k6 generator CPU% missing (sar not started on k6 runs; fixed in suite)
-- vegeta latency figures look anomalous under open pacing (under investigation)
-- Kernel/tool metadata partially recorded; SETUP.md now mandates full env capture
+- [ ] v0.5.4: fix sustained-load allocation/GC regression (S2/S4)
+- [ ] Investigate vegeta's anomalous latency figures under open pacing (both rounds)
+- [ ] Heavier target endpoint for true server breaking-point measurement
+- [ ] Record full kernel/tool metadata per round automatically
 
-Reproduce everything yourself: [`bench/`](bench/README.md).
+Reproduce everything yourself: [`bench/`](bench/README.md) · setup guide: [`bench/SETUP.md`](bench/SETUP.md)
