@@ -41,20 +41,32 @@ When your load test shows slow responses, is it the **server** or **your machine
 
 ## Benchmarks
 
-Real numbers from battle testing on AWS EC2 (t3.medium, 2 vCPU, 4GB RAM).
+Reproducible lab: 2 × c6i.large (same AZ, private-IP traffic), warmup + 3 runs,
+median reported, `sar` monitoring on both machines. Full methodology and raw
+numbers in [**BENCHMARKS.md**](BENCHMARKS.md) · suite in [`bench/`](bench/).
 
-### go-storm vs k6
+### go-storm vs k6 (published round, Aug 2026)
 
-| Test | go-storm | k6 | Winner |
-|------|----------|-----|--------|
-| 10K reqs, 100 concurrency | **11,960 RPS** | 7,118 RPS | go-storm **1.68x faster** |
-| 200K reqs, 2000 concurrency | **7,220 RPS** | CRASHED (EOF errors) | go-storm **finished, k6 didn't** |
-| 50K reqs, 5000 RPS rate limit | **5,551 RPS** (100% accurate) | 4,972 RPS (277 dropped) | go-storm **more accurate** |
-| 10K POST, 200 concurrency | **10,322 RPS** | 5,471 RPS | go-storm **1.89x faster** |
-| 5K slow endpoint (100ms) | **976 RPS** | 956 RPS | go-storm |
-| 100K POST, 500 concurrency | **9,816 RPS** | 6,250 RPS | go-storm **1.57x faster** |
+| Scenario | go-storm | k6 | Delta |
+|----------|----------|-----|--------|
+| Sustained soak (60s, c=100) | **35,870 RPS**, p99 9.7ms | 24,332 RPS, p99 16.0ms | **+47% throughput, −39% p99** |
+| Generator ceiling (c=1000, 30s) | **31,198 RPS** | 18,154 RPS | **+72% throughput** |
 
-**Final Score: go-storm 6 — k6 0**
+Honest scoreboard from the same round: **wrk wins raw throughput** (C + epoll —
+65K RPS at half the CPU). We publish our losses too; that is the point of
+["The Load Tester That Tells Truth"](BENCHMARKS.md#honest-findings-from-this-round).
+Rate-accuracy bug found by this suite (+3.3%) is being fixed in v0.6.1.
+
+<details>
+<summary>Early internal tests (single t3.medium, superseded by the lab above)</summary>
+
+| Test | go-storm | k6 |
+|------|----------|-----|
+| 10K reqs, c=100 | **11,960 RPS** | 7,118 RPS |
+| 200K reqs, c=2000 | **finished** | crashed (EOF errors) |
+| 50K reqs @ 5000 RPS rate limit | **5,551 RPS** | 4,972 RPS |
+
+</details>
 
 ### Key Numbers
 
@@ -83,7 +95,8 @@ k6:
 - GET / POST / PUT / DELETE / PATCH / HEAD
 - Custom headers (`-H "Authorization: Bearer $TOKEN"`, repeatable)
 - Per-request timeout
-- Rich statistics: min/avg/max, p50/p95/p99 (sub-millisecond precision), RPS, success rate
+- Rich statistics: min/avg/max, p50/p90/p95/p99/p99.9 (sub-millisecond precision), RPS, success rate
+- **Bounded-error percentiles** — every percentile carries a *guaranteed* ≤0.78% relative error, by construction (no distributional assumptions)
 - Status code distribution
 - Live progress bar with real-time RPS
 - CI gate flags: `--fail-above-errors`, `--fail-above-p95` (exit 2 on violation)
@@ -218,7 +231,7 @@ storm run -u https://example.com -n 1000 --format table
 | `--fail-above-p95` | | `-1` *(off)* | Exit 2 if p95 latency exceeds MS ms |
 | `--saturation` | | `true` | Generator health monitoring |
 | `--estimate` | | `false` | Pre-test capacity estimation |
-| `--saturation-kill` | | `false` | Kill on critical saturation |
+| `--saturation-kill` | | `false` | Terminate test on sustained critical generator saturation (CPU/GC/FDs/goroutines/memory) |
 | `--metrics-port` | | `0` | Prometheus port (0 = disabled) |
 | `--max-idle-conns` | | `200` | Max idle connections |
 | `--max-idle-per-host` | | `50` | Max idle per host |
@@ -270,8 +283,10 @@ The pipeline goes red if more than 20 requests fail **or** p95 latency exceeds 5
   ───────────────────┼────────────────────
   │ Avg Latency       │            7.00 ms │
   │ p50 Latency       │               5 ms │
+  │ p90 Latency       │              10 ms │
   │ p95 Latency       │              10 ms │
   │ p99 Latency       │              50 ms │
+  │ p99.9 Latency     │              80 ms │
   │ Min               │               0 ms │
   │ Max               │              47 ms │
   ───────────────────┼────────────────────
@@ -335,8 +350,10 @@ Checks
   "success_rate": 100,
   "avg_response_time_ms": 7.42,
   "p50_ms": 6.85,
+  "p90_ms": 21.4,
   "p95_ms": 48.21,
   "p99_ms": 50,
+  "p999_ms": 50.9,
   "requests_per_sec": 11960.10,
   "total_duration_ms": 836,
   "status_codes": { "200": 10000 }
@@ -344,6 +361,8 @@ Checks
 ```
 
 Latency values are fractional milliseconds — sub-millisecond precision is preserved, so fast targets never report a misleading `0ms`.
+
+Percentiles come from a log-linear histogram with a **guaranteed relative error ≤0.78%** — verified by property tests against exact sorted-slice computation (`pkg/storm/loghistogram_test.go`), not by assumption.
 
 ---
 
