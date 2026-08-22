@@ -6,6 +6,17 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.5.5] — 2026-08-22
+
+### Added
+- **Distributed engine test coverage** — `internal/dist` (previously 452 untested lines) is now behavior-tested end-to-end against in-process miniredis (no Docker, no live Redis): wire-format round trips, multi-chunk job publishing, queue drain with run-ID tagging, agent registry lifecycle with deterministic TTL expiry + heartbeat renewal (miniredis clock control), waitForAgents success/timeout paths, full RunAgent loop (jobs → HTTP → results → deregistration), coordinator aggregation with per-agent breakdown and stale-run isolation, and Flush. Race-detector clean.
+
+### Changed
+- **`internal/dist` split into focused files** — the 452-line monolith is now `redis.go` (client wrapper), `protocol.go` (key layout + wire formats), `queue.go` (job/result operations), `registry.go` (agent registry), `agent.go` (agent runtime), `coordinator.go` (aggregation). Public API unchanged; timing constants (`popTimeout`, `idleTimeout`, `heartbeatTTL`, `agentsWait`) became documented struct fields with identical defaults so tests can shorten them.
+- `miniredis` added as a **test-only** dependency (imported exclusively by `_test.go` files; never ships in the binary).
+
+---
+
 ## [0.5.4] — 2026-08-22
 
 ### Added

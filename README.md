@@ -387,7 +387,7 @@ Percentiles come from a log-linear histogram with a **guaranteed relative error 
 
 ## Distributed Load Testing
 
-Distribute load across multiple machines using Redis.
+Distribute load across multiple machines using Redis. The distributed engine is covered by an in-process integration suite (miniredis) — queue flow, agent lifecycle, TTL-based dead-agent detection, coordinator aggregation, and stale-run isolation are all tested; no live Redis needed to develop against it.
 
 ### Architecture
 
