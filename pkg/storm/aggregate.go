@@ -19,6 +19,7 @@ func Aggregate(results []Result) Stats {
 		statusCodes   = make(map[int]int)
 		errors        []string
 		durations     []time.Duration
+		ttfs          []time.Duration
 	)
 
 	firstResult := true
@@ -43,6 +44,9 @@ func Aggregate(results []Result) Stats {
 
 		totalDuration += result.Duration
 		durations = append(durations, result.Duration)
+		if result.TTFB > 0 {
+			ttfs = append(ttfs, result.TTFB)
+		}
 
 		if firstResult {
 			minDuration = result.Duration
@@ -69,7 +73,7 @@ func Aggregate(results []Result) Stats {
 		return durations[i] < durations[j]
 	})
 
-	return Stats{
+	s := Stats{
 		TotalRequests:   len(results),
 		Successful:      successCount,
 		Failed:          failCount,
@@ -84,6 +88,21 @@ func Aggregate(results []Result) Stats {
 		StatusCodes:     statusCodes,
 		Errors:          errors,
 	}
+
+	if len(ttfs) > 0 {
+		sort.Slice(ttfs, func(i, j int) bool { return ttfs[i] < ttfs[j] })
+		var ttfbSum time.Duration
+		for _, d := range ttfs {
+			ttfbSum += d
+		}
+		s.TtfbAvg = ttfbSum / time.Duration(len(ttfs))
+		s.TtfbP50 = percentile(ttfs, 50)
+		s.TtfbP90 = percentile(ttfs, 90)
+		s.TtfbP95 = percentile(ttfs, 95)
+		s.TtfbP99 = percentile(ttfs, 99)
+	}
+
+	return s
 }
 
 // percentile returns the duration at the given percentile (0-100)

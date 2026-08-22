@@ -23,6 +23,10 @@ type Collector struct {
 	errorCount    int
 	errorSamples  map[string]int
 	hist          *LogHistogram
+
+	ttfbTotal time.Duration
+	ttfbCount int
+	ttfbHist  *LogHistogram
 }
 
 // NewCollector creates a ready-to-use streaming aggregator.
@@ -31,6 +35,7 @@ func NewCollector() *Collector {
 		statusCodes:  make(map[int]int),
 		errorSamples: make(map[string]int),
 		hist:         NewLogHistogram(),
+		ttfbHist:     NewLogHistogram(),
 		firstResult:  true,
 	}
 }
@@ -61,6 +66,12 @@ func (c *Collector) Add(r Result) {
 	c.totalDuration += r.Duration
 	c.hist.Observe(r.Duration)
 
+	if r.TTFB > 0 {
+		c.ttfbTotal += r.TTFB
+		c.ttfbCount++
+		c.ttfbHist.Observe(r.TTFB)
+	}
+
 	if c.firstResult {
 		c.minDuration = r.Duration
 		c.maxDuration = r.Duration
@@ -82,7 +93,7 @@ func (c *Collector) Stats() Stats {
 		avg = c.totalDuration / time.Duration(c.count)
 	}
 
-	return Stats{
+	s := Stats{
 		TotalRequests:   c.count,
 		Successful:      c.successCount,
 		Failed:          c.failCount,
@@ -97,4 +108,14 @@ func (c *Collector) Stats() Stats {
 		StatusCodes:     c.statusCodes,
 		Errors:          c.errors,
 	}
+
+	if c.ttfbCount > 0 {
+		s.TtfbAvg = c.ttfbTotal / time.Duration(c.ttfbCount)
+		s.TtfbP50 = c.ttfbHist.Percentile(50)
+		s.TtfbP90 = c.ttfbHist.Percentile(90)
+		s.TtfbP95 = c.ttfbHist.Percentile(95)
+		s.TtfbP99 = c.ttfbHist.Percentile(99)
+	}
+
+	return s
 }

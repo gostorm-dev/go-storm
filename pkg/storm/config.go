@@ -74,9 +74,15 @@ type Result struct {
 	JobID      int64
 	Method     string
 	StatusCode int
-	Duration   time.Duration
-	Error      error
-	Timestamp  time.Time
+	// Duration is the FULL response time: request start until headers and
+	// body are both received (ecosystem-comparable with vegeta/k6/ab).
+	Duration time.Duration
+	// TTFB is time to first byte: request start until response headers
+	// arrive. Zero on transport errors. Server-processing insight that
+	// most load testers do not expose.
+	TTFB      time.Duration
+	Error     error
+	Timestamp time.Time
 }
 
 // Stats aggregates the results of a full load test run.
@@ -93,9 +99,16 @@ type Stats struct {
 	P95             time.Duration
 	P99             time.Duration
 	P999            time.Duration
-	RequestsPerSec  float64
-	StatusCodes     map[int]int
-	Errors          []string
+
+	// Time-to-first-byte distribution (zero when nothing succeeded).
+	TtfbAvg        time.Duration
+	TtfbP50        time.Duration
+	TtfbP90        time.Duration
+	TtfbP95        time.Duration
+	TtfbP99        time.Duration
+	RequestsPerSec float64
+	StatusCodes    map[int]int
+	Errors         []string
 
 	// Schedule adherence for rate-limited runs (nil otherwise): how well
 	// the generator held its own arrival slots.

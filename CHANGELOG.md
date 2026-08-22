@@ -6,6 +6,16 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.5.4] — 2026-08-22
+
+### Added
+- **TTFB percentiles** — time-to-first-byte reported alongside latency (`ttfb_avg_ms`, `ttfb_p50_ms`, `ttfb_p90_ms`, `ttfb_p95_ms`, `ttfb_p99_ms` JSON keys, additive; rows in text/table/csv): server-processing time isolated from transfer time — a metric most load testers never expose. Design note `.plans/DESIGN-latency-semantics.md`.
+
+### Changed
+- **Latency now measures the FULL response** (headers + drained body), matching vegeta/k6/ab. Previously the clock stopped at first byte and the body download went uncounted, so body-carrying responses reported systematically low, cross-tool-incomparable numbers; TTFB is now captured separately instead of being silently conflated with latency. Empty-body runs are unaffected within noise. Migration: CI gates calibrated via `--fail-above-p95` may need recalibration when targets return large bodies.
+
+---
+
 ## [0.5.3] — 2026-08-22
 
 ### Added

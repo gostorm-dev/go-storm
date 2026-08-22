@@ -154,14 +154,14 @@ func Execute(ctx context.Context, client *http.Client, job Job, connStats *Conne
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 
 	resp, err := client.Do(req)
-	duration := time.Since(start)
+	ttfb := time.Since(start) // headers fully received (time to first byte)
 
 	if err != nil {
 		return Result{
 			JobID:     job.ID,
 			Method:    job.Method,
 			Error:     err,
-			Duration:  duration,
+			Duration:  ttfb,
 			Timestamp: time.Now(),
 		}
 	}
@@ -169,7 +169,11 @@ func Execute(ctx context.Context, client *http.Client, job Job, connStats *Conne
 
 	// CRITICAL: Drain the body so the connection can be returned to the pool.
 	// Without this, Go discards the TCP connection instead of reusing it.
+	// The drain is timed — reported latency means FULL response, matching
+	// vegeta/k6/ab so numbers are cross-tool comparable. See
+	// .plans/DESIGN-latency-semantics.md.
 	io.Copy(io.Discard, resp.Body)
+	duration := time.Since(start)
 
 	// Track connection reuse: if ConnectStart did NOT fire, it was a pool hit.
 	if connStats != nil {
@@ -186,6 +190,7 @@ func Execute(ctx context.Context, client *http.Client, job Job, connStats *Conne
 		Method:     job.Method,
 		StatusCode: resp.StatusCode,
 		Duration:   duration,
+		TTFB:       ttfb,
 		Error:      nil,
 		Timestamp:  time.Now(),
 	}

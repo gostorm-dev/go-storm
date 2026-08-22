@@ -288,6 +288,8 @@ The pipeline goes red if more than 20 requests fail **or** p95 latency exceeds 5
   │ p95 Latency       │              10 ms │
   │ p99 Latency       │              50 ms │
   │ p99.9 Latency     │              80 ms │
+  │ TTFB p50          │               4 ms │
+  │ TTFB p95          │               6 ms │
   │ Min               │               0 ms │
   │ Max               │              47 ms │
   ───────────────────┼────────────────────
@@ -361,6 +363,10 @@ Checks
   "p95_ms": 48.21,
   "p99_ms": 50,
   "p999_ms": 50.9,
+  "ttfb_avg_ms": 5.1,
+  "ttfb_p50_ms": 4.2,
+  "ttfb_p95_ms": 6.9,
+  "ttfb_p99_ms": 8.3,
   "requests_per_sec": 11960.10,
   "total_duration_ms": 836,
   "status_codes": { "200": 10000 }
@@ -370,6 +376,12 @@ Checks
 Latency values are fractional milliseconds — sub-millisecond precision is preserved, so fast targets never report a misleading `0ms`.
 
 Percentiles come from a log-linear histogram with a **guaranteed relative error ≤0.78%** — verified by property tests against exact sorted-slice computation (`pkg/storm/loghistogram_test.go`), not by assumption.
+
+### What latency means
+
+**Latency** = full response time: request sent → headers **and body** fully received. This matches vegeta, k6 and ab, so numbers are cross-tool comparable. (Older releases stopped the clock at first byte; see CHANGELOG.)
+
+**TTFB** = request sent → response headers received. It isolates server processing + queueing from transfer time and is reported alongside latency in `text`, `table`, `csv` and JSON (`ttfb_*` fields) — most load testers don't expose it at all.
 
 ---
 

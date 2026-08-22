@@ -34,8 +34,17 @@ type Report struct {
 	P95             float64 `json:"p95_ms"`
 	P99             float64 `json:"p99_ms"`
 	P999            float64 `json:"p999_ms"`
-	RequestsPerSec  float64 `json:"requests_per_sec"`
-	TotalDuration   int64   `json:"total_duration_ms"`
+
+	// Time-to-first-byte distribution — omitted entirely when nothing
+	// succeeded. Latency above means full response; TTFB isolates the
+	// server-processing + header phase.
+	TtfbAvg        float64 `json:"ttfb_avg_ms,omitempty"`
+	TtfbP50        float64 `json:"ttfb_p50_ms,omitempty"`
+	TtfbP90        float64 `json:"ttfb_p90_ms,omitempty"`
+	TtfbP95        float64 `json:"ttfb_p95_ms,omitempty"`
+	TtfbP99        float64 `json:"ttfb_p99_ms,omitempty"`
+	RequestsPerSec float64 `json:"requests_per_sec"`
+	TotalDuration  int64   `json:"total_duration_ms"`
 	// RequestedDurationMs records the requested window for duration-mode
 	// runs (0 in count mode). Storing the request intent keeps runs
 	// comparable and reproducible.
@@ -72,6 +81,10 @@ func PrintStatsReport(config Config, stats Stats) {
 	fmt.Printf("p95 Response: %v\n", stats.P95)
 	fmt.Printf("p99 Response: %v\n", stats.P99)
 	fmt.Printf("p99.9 Response: %v\n", stats.P999)
+	if stats.TtfbP99 > 0 {
+		fmt.Printf("TTFB p50/p90/p95/p99: %v / %v / %v / %v\n",
+			stats.TtfbP50, stats.TtfbP90, stats.TtfbP95, stats.TtfbP99)
+	}
 	fmt.Printf("Requests/sec: %.2f\n", stats.RequestsPerSec)
 	if config.Duration > 0 {
 		fmt.Printf("Requested Duration: %v\n", config.Duration)
@@ -120,6 +133,11 @@ func ReportJSON(config Config, stats Stats) ([]byte, error) {
 		P95:                 ms(stats.P95),
 		P99:                 ms(stats.P99),
 		P999:                ms(stats.P999),
+		TtfbAvg:             ms(stats.TtfbAvg),
+		TtfbP50:             ms(stats.TtfbP50),
+		TtfbP90:             ms(stats.TtfbP90),
+		TtfbP95:             ms(stats.TtfbP95),
+		TtfbP99:             ms(stats.TtfbP99),
 		RequestsPerSec:      stats.RequestsPerSec,
 		TotalDuration:       stats.TotalDuration.Milliseconds(),
 		RequestedDurationMs: config.Duration.Milliseconds(),
@@ -192,6 +210,12 @@ func PrintStatsTable(config Config, stats Stats) {
 	fmt.Println(row("p95 Latency", fmt.Sprintf("%.2f ms", ms(stats.P95))))
 	fmt.Println(row("p99 Latency", fmt.Sprintf("%.2f ms", ms(stats.P99))))
 	fmt.Println(row("p99.9 Latency", fmt.Sprintf("%.2f ms", ms(stats.P999))))
+	if stats.TtfbP99 > 0 {
+		fmt.Println(row("TTFB p50", fmt.Sprintf("%.2f ms", ms(stats.TtfbP50))))
+		fmt.Println(row("TTFB p90", fmt.Sprintf("%.2f ms", ms(stats.TtfbP90))))
+		fmt.Println(row("TTFB p95", fmt.Sprintf("%.2f ms", ms(stats.TtfbP95))))
+		fmt.Println(row("TTFB p99", fmt.Sprintf("%.2f ms", ms(stats.TtfbP99))))
+	}
 	fmt.Println(row("Min", fmt.Sprintf("%.2f ms", ms(stats.MinResponseTime))))
 	fmt.Println(row("Max", fmt.Sprintf("%.2f ms", ms(stats.MaxResponseTime))))
 	fmt.Printf("  %s\n", strings.Repeat("─", L+2)+"┼"+strings.Repeat("─", R+2))
@@ -239,6 +263,13 @@ func PrintStatsCSV(config Config, stats Stats) {
 	fmt.Printf("p95_ms,%.2f\n", ms(stats.P95))
 	fmt.Printf("p99_ms,%.2f\n", ms(stats.P99))
 	fmt.Printf("p999_ms,%.2f\n", ms(stats.P999))
+	if stats.TtfbP99 > 0 {
+		fmt.Printf("ttfb_avg_ms,%.2f\n", ms(stats.TtfbAvg))
+		fmt.Printf("ttfb_p50_ms,%.2f\n", ms(stats.TtfbP50))
+		fmt.Printf("ttfb_p90_ms,%.2f\n", ms(stats.TtfbP90))
+		fmt.Printf("ttfb_p95_ms,%.2f\n", ms(stats.TtfbP95))
+		fmt.Printf("ttfb_p99_ms,%.2f\n", ms(stats.TtfbP99))
+	}
 	fmt.Printf("min_ms,%.2f\n", ms(stats.MinResponseTime))
 	fmt.Printf("max_ms,%.2f\n", ms(stats.MaxResponseTime))
 	fmt.Printf("rps,%.2f\n", stats.RequestsPerSec)
