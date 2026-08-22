@@ -6,7 +6,7 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [0.6.0] — 2026-08-22
+## [0.5.3] — 2026-08-22
 
 ### Added
 - **Bounded-error latency percentiles** — the streaming engine's 9-bucket histogram is replaced by a log-linear histogram with a *guaranteed* maximum relative error of ≤0.78% on every percentile, independent of the latency distribution:
@@ -36,47 +36,7 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [0.5.2] — 2026-08-22
-
-### Changed
-- **Module path renamed** to `github.com/gostorm-dev/go-storm` — now matches the README install command, badges, and the published org repository. All internal imports updated; no behavioral change.
-- **License documentation corrected** — README now references Apache License 2.0, matching the actual LICENSE file (was incorrectly labeled MIT).
-- CONTRIBUTING clone URL points to the org repository.
-
-### Fixed
-- **go.mod repaired** via `go mod tidy` — direct dependencies (cobra, go-redis, prometheus client, progressbar, color, x/time) are no longer mislabeled `// indirect`.
-- `cmd/storm/banner.go` formatted with gofmt — the CI formatting gate passes again.
-
----
-
-## [0.5.0] — 2026-08-20
-
-### Added
-- **CLI world-class overhaul**:
-  - ASCII banner with branding
-  - Examples in help for all commands
-  - Flag validation with actionable error messages
-  - 5 output formats: text, json, table, quiet, csv
-  - Version system with ldflags (version, commit, buildDate)
-  - Makefile with build/install/test/race/bench targets
-- **Battle tested against k6**:
-  - 10K test: go-storm 1.68x faster
-  - 200K test: go-storm finished, k6 crashed
-  - 50K rate limit: go-storm 100% accurate
-  - 10K POST: go-storm 1.89x faster
-  - 100K POST: go-storm 1.57x faster
-  - Final score: go-storm 6, k6 0
-- **README rewrite** with real benchmark numbers
-
-### Changed
-- Default URL removed — `-u` flag is now required
-- `--format` flag now supports: text, json, table, quiet, csv
-- Health report only shown for text/table formats (not quiet/csv)
-- Config output suppressed for quiet/csv formats
-
----
-
-## [0.6.0] — 2026-08-22 (continued)
+## [0.5.3] — 2026-08-22 (continued)
 
 ### Fixed
 - **`--saturation-kill` is now real** — previously the flag only changed a printed label; no kill logic existed. The engine now runs a watchdog during the test that terminates it when generator resource saturation persists (~3 consecutive checks):
@@ -183,6 +143,47 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 | Run pipeline (1K reqs) | 14.4 MB | 12.3 MB | **-15% memory** |
 
 ---
+
+## [0.5.2] — 2026-08-22
+
+### Changed
+- **Module path renamed** to `github.com/gostorm-dev/go-storm` — now matches the README install command, badges, and the published org repository. All internal imports updated; no behavioral change.
+- **License documentation corrected** — README now references Apache License 2.0, matching the actual LICENSE file (was incorrectly labeled MIT).
+- CONTRIBUTING clone URL points to the org repository.
+
+### Fixed
+- **go.mod repaired** via `go mod tidy` — direct dependencies (cobra, go-redis, prometheus client, progressbar, color, x/time) are no longer mislabeled `// indirect`.
+- `cmd/storm/banner.go` formatted with gofmt — the CI formatting gate passes again.
+
+---
+
+## [0.5.0] — 2026-08-20
+
+### Added
+- **CLI world-class overhaul**:
+  - ASCII banner with branding
+  - Examples in help for all commands
+  - Flag validation with actionable error messages
+  - 5 output formats: text, json, table, quiet, csv
+  - Version system with ldflags (version, commit, buildDate)
+  - Makefile with build/install/test/race/bench targets
+- **Battle tested against k6**:
+  - 10K test: go-storm 1.68x faster
+  - 200K test: go-storm finished, k6 crashed
+  - 50K rate limit: go-storm 100% accurate
+  - 10K POST: go-storm 1.89x faster
+  - 100K POST: go-storm 1.57x faster
+  - Final score: go-storm 6, k6 0
+- **README rewrite** with real benchmark numbers
+
+### Changed
+- Default URL removed — `-u` flag is now required
+- `--format` flag now supports: text, json, table, quiet, csv
+- Health report only shown for text/table formats (not quiet/csv)
+- Config output suppressed for quiet/csv formats
+
+---
+
 
 ## [0.2.0] — 2026-08-17
 
