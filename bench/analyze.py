@@ -27,15 +27,30 @@ def parse_veg(path):
     return r["throughput"], l["50th"] / 1000, l["95th"] / 1000, l["99th"] / 1000, r["requests"] - ok
 
 def sar_cpu(tag):
+    """Return (busy%, steal%) from the generator's sar log.
+
+    busy = %user + %nice + %system — real generator work.
+    %steal MUST NOT count as effort: on shared-vCPU instances hypervisor
+    theft depresses idle and masquerades as load, so it is surfaced
+    separately and excluded from generator effort.
+    """
     path = f"{SAR}/gen_{tag}.log"
     if not os.path.exists(path):
-        return None
-    idle = None
+        return None, None
+    row = None
     for line in open(path):
-        m = re.match(r"Average:\s+all\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+([\d.]+)", line)
-        if m:
-            idle = float(m.group(1))
-    return round(100 - idle, 1) if idle is not None else None
+        if line.startswith("Average:") and " all " in line:
+            fields = line.split()
+            # Average: all %user %nice %system %iowait %steal %idle
+            row = fields[2:]
+    if not row or len(row) < 6:
+        return None, None
+    try:
+        user, nice, system = float(row[0]), float(row[1]), float(row[2])
+        steal = float(row[4])
+    except ValueError:
+        return None, None
+    return round(user + nice + system, 1), round(steal, 1)
 
 rows = []  # tool, scen, rps, p50, p95, p99, failed, gen_cpu
 for f in sorted(os.listdir(RAW)):
@@ -92,9 +107,10 @@ for scen in ["S1", "S2", "S3", "S4"]:
             vv = [r[i] for r in rs if r[i] is not None]
             cols.append(med(vv) if vv else "NA")
         failed = sum(int(r[6]) for r in rs)
-        cpu = sar_cpu(f"{tool}_{scen}_run2")
+        busy, steal = sar_cpu(f"{tool}_{scen}_run2")
+        cpu = f"{busy}%" + (f" (steal {steal}%)" if steal and steal >= 1 else "")
         spread = (max(r[2] for r in rs) - min(r[2] for r in rs)) / rps_m * 100
-        print(f"{tool:8s} {rps_m:>9.0f} | {cols[0]:>7} | {cols[1]:>8} | {cols[2]:>8} | {failed:>4} | {cpu}% | spread ±{spread:.1f}%")
+        print(f"{tool:8s} {rps_m:>9.0f} | {cols[0]:>7} | {cols[1]:>8} | {cols[2]:>8} | {failed:>4} | {cpu:>18} | spread ±{spread:.1f}%")
         final[(tool, scen)] = rps_m
 
 print("\n=== HEAD TO HEAD vs k6 (median RPS ratio) ===")

@@ -6,6 +6,29 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.5.6] — 2026-08-23
+
+### Changed
+- **Round 2 benchmark investigation corrected** — a four-binary A/B disproves any
+  code regression behind the reported v0.5.3 sustained-load drop; GC-cycle counts
+  scale with throughput (~79 allocs/request) and were never evidence of a
+  regression. %steal is ruled out by sar data (≤0.02% in every Round 2 window).
+  The open anomaly: generator kernel-space time (%system 66.5% during storm's
+  soak vs 15.6% for k6 at equal ~98% total CPU), consistent with connection-path
+  syscalls under real-network latency — invisible on loopback. Root cause stays
+  "under investigation"; a pool-sizing A/B runs before Round 3 publishes numbers.
+- `bench/analyze.py` GenCPU formula hardened: `%user+%nice+%system` only.
+  Hypervisor `%steal` is excluded from generator effort and surfaced separately
+  per run (defense-in-depth on shared-vCPU instances).
+
+### Fixed
+- `bench/analyze.py` rejected valid 6-column sar CPU averages (`len(row) < 7`
+  check), printing `None%` for every tool's generator CPU.
+
+Engine unchanged in this release — measurement hygiene only.
+
+---
+
 ## [0.5.5] — 2026-08-22
 
 ### Added

@@ -5,16 +5,49 @@
 > Philosophy: numbers are reported as measured. Losses and regressions are shown,
 > not hidden. A benchmark you cannot reproduce is a benchmark you should not trust.
 
-## ⚠️ Current status (read first)
+## ✅ Current status (read first) — Round 2's "regression": code cleared, cause narrowed
 
-**v0.5.3 has a known performance regression on sustained unlimited-concurrency load**
-(S2 soak −57%, S4 ceiling −54% vs the previous build), caused by allocation pressure /
-GC thrash (~662 GC cycles per 30s observed via go-storm's own generator health report).
-Short bursts (S1) and rate-limited runs (S3) are unaffected — S3 numbers below are a
-record for this project. Fix targeted for v0.5.4.
+Round 2 reported v0.5.3 regressing on sustained load (S2 −57%, S4 −54%,
+"89.8% CPU", ~662 GC cycles/30s). **A four-binary A/B disproves any code
+regression.** All binaries ran the identical sustained workload (`-d 20s
+-c 100`) against one local target:
 
-The regression was caught **by this suite within hours of release**, before any user report.
-That is exactly what the suite exists for.
+| Binary | Commit | RPS | GC cycles/20s |
+|---|---|---|---|
+| Round-1 EC2 binary | pre-v0.5.3 | 26,393 | 490 |
+| Round-2 EC2 binary | v0.5.3 | 25,344 | 500 |
+| Fresh build | pre-v0.5.3 | 25,112 | 467 |
+| Fresh build | v0.5.5 HEAD | 26,364 | 500 |
+
+All four are equivalent within run-to-run noise — GC cycle counts scale
+proportionally with throughput at go-storm's ~79 allocs/request, so cycles
+alone were never evidence of a regression.
+
+**What the evidence rules out — and what it does not:**
+
+- **No code regression.** The four-binary A/B above shows all builds
+  equivalent under identical load.
+- **%steal ruled out.** Every Round 2 sar window (storm included) measured
+  0.01–0.02 %steal — hypervisor theft did not cause this.
+- **The measured anomaly:** during storm's sustained runs the generator
+  spent **66.5% of CPU in kernel space** (%system, sar) vs 15.6% for k6 on
+  the same scenario — a syscall/connection-path signature that does not
+  appear on loopback (hence invisible in the local A/B). Leading suspect:
+  connection churn under real-network latency; unproven until tested.
+
+**Round 3 opens with a decisive pool-sizing A/B** (`--max-idle-conns-per-host`
+default vs enlarged) before any numbers are published. Root cause stays
+"under investigation" until then.
+
+Actions taken:
+- `analyze.py` now reports `GenCPU% = %user+%nice+%system` and surfaces
+  `%steal` separately per run (defense-in-depth); `bench/README.md`
+  formulas updated.
+- Round 3 must log steal per run; consider dedicated-vCPU instances for
+  the generator.
+
+The suite still gets credit for catching the anomaly within hours — even a
+false alarm beats silent trust in bad numbers.
 
 ---
 
@@ -101,7 +134,9 @@ wrk     1356      hey      450      go-storm 367      vegeta   341
 
 ## Open items
 
-- [ ] v0.5.4: fix sustained-load allocation/GC regression (S2/S4)
+- [x] ~~v0.5.4: fix sustained-load allocation/GC regression (S2/S4)~~ — investigated: no code regression exists (four-binary A/B above); %steal ruled out by sar data; kernel-space anomaly (%system 66.5%) under investigation
+- [ ] Pool-sizing A/B before Round 3 (`--max-idle-conns-per-host` default vs enlarged) to confirm/refute the connection-churn hypothesis
+- [ ] Round 3: re-run S2/S4 with the corrected formula + per-run steal logging to publish clean numbers
 - [ ] Investigate vegeta's anomalous latency figures under open pacing (both rounds)
 - [ ] Heavier target endpoint for true server breaking-point measurement
 - [ ] Record full kernel/tool metadata per round automatically

@@ -44,11 +44,18 @@ Fairness notes:
 ```
 RPS            = total_requests / duration_seconds
 Deviation %    = |achieved_rps − target_rps| / target_rps × 100      (S3 accuracy)
-GenCPU %       = 100 − sar "Average:" idle %
+GenCPU %       = %user + %nice + %system                              (real work only)
+Steal %        = reported separately — hypervisor theft is NOT generator effort
 Efficiency     = median_RPS / GenCPU %                                (RPS per CPU point)
 Spread %       = (max_run − min_run) / median × 100                   (consistency)
 Error %        = failed_requests / total_requests × 100
 ```
+
+> **Why steal is excluded:** on shared-vCPU instances (c6i.large etc.) the
+> hypervisor can take a large share of cycles; `100 − idle` then reads as
+> "generator busy" while real throughput halves. Steal is therefore reported
+> separately per run and excluded from generator effort — see
+> [`BENCHMARKS.md`](../BENCHMARKS.md) for the Round 2 investigation.
 
 ### Reproduce it yourself
 
