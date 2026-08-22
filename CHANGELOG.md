@@ -6,6 +6,36 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.6.0] — 2026-08-22
+
+### Added
+- **Bounded-error latency percentiles** — the streaming engine's 9-bucket histogram is replaced by a log-linear histogram with a *guaranteed* maximum relative error of ≤0.78% on every percentile, independent of the latency distribution:
+  - Each power-of-two binade of latency space is split into 128 equal intervals; every bucket therefore spans at most a factor 1+1/128. Interpolation never leaves the containing bucket, so p50/p90/p95/p99/p99.9 can no longer be off by bucket-width amounts (previously buckets up to 4s wide made p99 estimates unreliable).
+  - Hot-path `Observe` costs ~4.5ns with zero allocations (IEEE-754 bit decomposition, no library calls). Collector throughput at 100k requests improved ~14% vs v0.5.2 despite far higher accuracy.
+  - Fixed memory: ~32KB once per run regardless of request count — still O(1) streaming, still no stored latencies.
+  - **New percentiles reported everywhere**: p90 and p99.9 join p50/p95/p99 in text, table, csv, quiet, and JSON output (`p90_ms`, `p999_ms` JSON keys, additive).
+  - Histograms are **mergeable** (`LogHistogram.Merge`) — combined percentiles across distributed agents become exact once wired into the dist aggregation.
+  - Batch `Aggregate()` (distributed coordinator path) keeps exact sort-based percentiles and gains the same new fields.
+  - Design note: `.plans/DESIGN-histogram-v2.md`; benchmarks recorded in `bench/`.
+- **Virtual-clock arrival scheduler** — `--rate` runs no longer use a token bucket:
+  - Duration mode dispatches **exactly** `ceil(rate × duration)` requests: `-r 5000 -d 30s` now sends 150,000 — previously ~155,000, deterministically, because the limiter's burst equaled a full second and started pre-filled (rate overshoot bug).
+  - No startup stampede: every request departs on its own scheduled slot (`start + j/rate`), so latency percentiles are clean from request #1.
+  - Drift-proof by construction: dispatch position is re-derived from the wall clock each step; timer jitter can never accumulate. All schedule math uses 128-bit intermediates — overflow impossible.
+  - **New arrival-accuracy telemetry**: on-time slot %, late-dispatch count, lag p50/p99/max. Surfaces in JSON reports (`arrival_accuracy` object) and the generator health report, with an actionable recommendation when accuracy drops below 95%. Slots above 1000 RPS are graded against a 1 ms floor (OS timer granularity), so scheduler noise is never reported as lateness.
+  - Design note `.plans/DESIGN-arrival-scheduler.md`; regression tests pin exact counts (`-r 2000 -d 1s` → exactly 2000).
+
+### Changed
+- Rate-limited run totals changed from "`rate × duration` + burst" to exact — this is the fix; CLI flags and output schemas unchanged except additive JSON fields.
+- Removed the `golang.org/x/time` dependency.
+- **Quiet format columns** — two additive columns (`p90`, `p999`) were inserted after `p99`; the first 9 columns are unchanged. Positional parsers reading beyond column 9 must skip to the new layout: total,succ,fail,rate,avg,p50,p90,p95,p99,p999,rps[,requested_s].
+- Removed empty placeholder directories `internal/ratelimit`, `internal/stats`, `internal/tester`.
+
+### Fixed
+- **Rate overshoot bug**: `-r R -d T` overshot by exactly one full second of traffic in every run (e.g. +5,000 requests at `-r 5000`); reported RPS exceeded target accordingly.
+- Percentile estimates are now covered by an explicit, tested error contract instead of relying on uniform-distribution assumptions inside wide buckets.
+
+---
+
 ## [0.5.2] — 2026-08-22
 
 ### Changed
@@ -46,7 +76,19 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [Unreleased]
+## [0.6.0] — 2026-08-22 (continued)
+
+### Fixed
+- **`--saturation-kill` is now real** — previously the flag only changed a printed label; no kill logic existed. The engine now runs a watchdog during the test that terminates it when generator resource saturation persists (~3 consecutive checks):
+  - Only resource signals can terminate a run: CPU, GC pressure, file descriptors, goroutines, memory growth. Worker utilization and RPS achievement never kill — they conflate "target is slow" with "generator is exhausted".
+  - Termination is graceful: in-flight requests finish and are counted; results cover only the completed portion.
+  - Kill reason and timestamp are recorded in Stats (`killed_on_saturation`, `kill_reason`, `killed_at_ms`) and in the health report verdict.
+  - Live watchdog evaluation fixes GC-pause semantics for kill decisions by using per-window deltas instead of process-lifetime totals.
+
+### Changed
+- `SetThresholds()` is now honored by `Run()` — previously overwritten unconditionally, making the API dead.
+- `EnableSaturationMonitoring()` documentation corrected: monitoring alone reports breaches, it does not terminate runs.
+- Worker utilization is now computed from exact accumulated per-request durations instead of an average-based approximation.
 
 ### Added
 - **Duration-based load mode** — `-d/--duration` runs the test for a wall-clock window instead of a request count:

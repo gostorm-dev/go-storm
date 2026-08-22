@@ -2,82 +2,8 @@ package storm
 
 import (
 	"fmt"
-	"math"
 	"time"
 )
-
-// defaultBuckets defines logarithmic bucket upper bounds in milliseconds.
-// Covering 1ms to 10s — typical HTTP latency range for load testing.
-// Memory: fixed 9 buckets + 1 overflow = 10 counters total.
-var defaultBuckets = []float64{1, 5, 10, 50, 100, 500, 1000, 5000, 10000}
-
-// Histogram counts observations into fixed logarithmic buckets.
-// It provides O(1) memory and O(1) per-observation recording, at the cost
-// of approximate percentile values (bounded by bucket width).
-type Histogram struct {
-	buckets []float64 // upper bounds in ms (sorted ascending)
-	counts  []int     // count per bucket (+ overflow)
-	total   int
-}
-
-// NewHistogram creates a histogram with the default bucket boundaries.
-func NewHistogram() *Histogram {
-	return &Histogram{
-		buckets: defaultBuckets,
-		counts:  make([]int, len(defaultBuckets)+1),
-	}
-}
-
-// Observe records one duration into the appropriate bucket.
-func (h *Histogram) Observe(d time.Duration) {
-	ms := float64(d) / float64(time.Millisecond)
-	for i, bound := range h.buckets {
-		if ms <= bound {
-			h.counts[i]++
-			h.total++
-			return
-		}
-	}
-	// Overflow: larger than all buckets
-	h.counts[len(h.buckets)]++
-	h.total++
-}
-
-// Percentile returns the approximate duration at the given percentile (0-100)
-// using linear interpolation within the containing histogram bucket, assuming
-// observations are uniformly distributed inside it. This is far more accurate
-// than snapping to the bucket's upper bound, especially for wide buckets.
-func (h *Histogram) Percentile(pct float64) time.Duration {
-	if h.total == 0 {
-		return 0
-	}
-
-	target := int(math.Ceil(float64(h.total) * pct / 100))
-	if target < 1 {
-		target = 1
-	}
-
-	cumulative := 0
-	for i, count := range h.counts {
-		prev := cumulative
-		cumulative += count
-		if cumulative >= target && count > 0 {
-			if i >= len(h.buckets) {
-				// Overflow bucket has no upper bound; report the last known one.
-				return time.Duration(h.buckets[len(h.buckets)-1]) * time.Millisecond
-			}
-			lower := 0.0
-			if i > 0 {
-				lower = h.buckets[i-1]
-			}
-			fraction := float64(target-prev) / float64(count)
-			value := lower + fraction*(h.buckets[i]-lower)
-			return time.Duration(value * float64(time.Millisecond))
-		}
-	}
-
-	return time.Duration(h.buckets[len(h.buckets)-1]) * time.Millisecond
-}
 
 const maxStoredErrors = 100
 
@@ -96,7 +22,7 @@ type Collector struct {
 	errors        []string
 	errorCount    int
 	errorSamples  map[string]int
-	hist          *Histogram
+	hist          *LogHistogram
 }
 
 // NewCollector creates a ready-to-use streaming aggregator.
@@ -104,7 +30,7 @@ func NewCollector() *Collector {
 	return &Collector{
 		statusCodes:  make(map[int]int),
 		errorSamples: make(map[string]int),
-		hist:         NewHistogram(),
+		hist:         NewLogHistogram(),
 		firstResult:  true,
 	}
 }
@@ -164,8 +90,10 @@ func (c *Collector) Stats() Stats {
 		MaxResponseTime: c.maxDuration,
 		AvgResponseTime: avg,
 		P50:             c.hist.Percentile(50),
+		P90:             c.hist.Percentile(90),
 		P95:             c.hist.Percentile(95),
 		P99:             c.hist.Percentile(99),
+		P999:            c.hist.Percentile(99.9),
 		StatusCodes:     c.statusCodes,
 		Errors:          c.errors,
 	}

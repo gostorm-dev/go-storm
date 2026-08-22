@@ -9,65 +9,6 @@ type testError string
 
 func (e testError) Error() string { return string(e) }
 
-func TestHistogramPercentile(t *testing.T) {
-	tests := []struct {
-		name      string
-		durations []time.Duration
-		pct       float64
-		want      time.Duration
-	}{
-		{
-			name:      "10 durations, p50",
-			durations: []time.Duration{10, 20, 30, 40, 50, 60, 70, 80, 90, 100},
-			pct:       50,
-			want:      50 * time.Millisecond,
-		},
-		{
-			name:      "10 durations, p95",
-			durations: []time.Duration{10, 20, 30, 40, 50, 60, 70, 80, 90, 100},
-			pct:       95,
-			want:      100 * time.Millisecond,
-		},
-		{
-			name:      "10 durations, p99",
-			durations: []time.Duration{10, 20, 30, 40, 50, 60, 70, 80, 90, 100},
-			pct:       99,
-			want:      100 * time.Millisecond,
-		},
-		{
-			name:      "empty histogram",
-			durations: []time.Duration{},
-			pct:       50,
-			want:      0,
-		},
-		{
-			name:      "single value",
-			durations: []time.Duration{50},
-			pct:       50,
-			want:      50 * time.Millisecond,
-		},
-		{
-			name:      "all same value",
-			durations: []time.Duration{10, 10, 10, 10, 10},
-			pct:       95,
-			want:      10 * time.Millisecond,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			h := NewHistogram()
-			for _, d := range tc.durations {
-				h.Observe(d * time.Millisecond)
-			}
-			got := h.Percentile(tc.pct)
-			if got != tc.want {
-				t.Errorf("Percentile(%v) = %v, want %v", tc.pct, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestCollectorMatchesAggregate(t *testing.T) {
 	// Build a set of results and compare streaming Collector with batch Aggregate.
 	results := make([]Result, 100)

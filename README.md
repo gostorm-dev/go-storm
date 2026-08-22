@@ -91,7 +91,7 @@ k6:
 ### Core
 - Concurrent workers with configurable pool size
 - **Duration mode** (`-d 5m`) — sustained load for a fixed window, graceful drain, no fake errors at the deadline
-- Rate limiting via token bucket (`-r` / `--rate`)
+- **Constant-arrival scheduling** (`-r` / `--rate`) — exactly `rate × duration` requests dispatched on fixed time slots; zero startup burst, zero overshoot
 - GET / POST / PUT / DELETE / PATCH / HEAD
 - Custom headers (`-H "Authorization: Bearer $TOKEN"`, repeatable)
 - Per-request timeout
@@ -111,6 +111,7 @@ k6:
 ### Generator Health (UNIQUE)
 - **Real-time monitoring**: CPU, memory, GC, goroutines, file descriptors
 - **Saturation detection**: knows when YOUR machine is the bottleneck
+- **Arrival accuracy**: did the generator hold its own schedule? On-time slot % + lag p50/p99/max
 - **Health report**: post-test analysis with actionable recommendations
 - **Capacity estimation** (`--estimate`): pre-test benchmark shows max RPS
 
@@ -323,6 +324,12 @@ Connection Pool
   Pool Hits:            473
   Pool Misses:          27
   Reuse Ratio:       94.6%
+
+Arrival Schedule
+  Dispatched:       50,000 / 50,000 slots
+  Slot interval:    2.00 ms
+  On-time slots:    99.4% (312 late) ✅
+  Lag p50/p99/max:  0.08 / 1.10 / 6.42 ms
 
 Checks
   ✅ CPU:                 46.7%

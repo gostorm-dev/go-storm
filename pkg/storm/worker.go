@@ -23,6 +23,7 @@ func (lt *LoadTester) worker(id int) {
 				lt.onResult(result)
 			}
 			lt.completed.Add(1)
+			lt.busyNanos.Add(int64(result.Duration))
 
 			// Track consecutive failures across all workers.
 			if result.Error != nil {

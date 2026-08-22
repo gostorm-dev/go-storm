@@ -30,16 +30,20 @@ type Report struct {
 	MaxResponseTime float64 `json:"max_response_time_ms"`
 	AvgResponseTime float64 `json:"avg_response_time_ms"`
 	P50             float64 `json:"p50_ms"`
+	P90             float64 `json:"p90_ms"`
 	P95             float64 `json:"p95_ms"`
 	P99             float64 `json:"p99_ms"`
+	P999            float64 `json:"p999_ms"`
 	RequestsPerSec  float64 `json:"requests_per_sec"`
 	TotalDuration   int64   `json:"total_duration_ms"`
 	// RequestedDurationMs records the requested window for duration-mode
 	// runs (0 in count mode). Storing the request intent keeps runs
 	// comparable and reproducible.
-	RequestedDurationMs int64       `json:"requested_duration_ms"`
-	StatusCodes         map[int]int `json:"status_codes"`
-	Errors              []string    `json:"errors,omitempty"`
+	RequestedDurationMs int64 `json:"requested_duration_ms"`
+	// Arrival schedule adherence for rate-limited runs (nil otherwise).
+	Arrival     *ArrivalAccuracy `json:"arrival_accuracy,omitempty"`
+	StatusCodes map[int]int      `json:"status_codes"`
+	Errors      []string         `json:"errors,omitempty"`
 }
 
 // PrintStatsReport renders a run's stats to stdout.
@@ -64,8 +68,10 @@ func PrintStatsReport(config Config, stats Stats) {
 	fmt.Printf("Max Response: %v\n", stats.MaxResponseTime)
 	fmt.Printf("Avg Response: %v\n", stats.AvgResponseTime)
 	fmt.Printf("p50 Response: %v\n", stats.P50)
+	fmt.Printf("p90 Response: %v\n", stats.P90)
 	fmt.Printf("p95 Response: %v\n", stats.P95)
 	fmt.Printf("p99 Response: %v\n", stats.P99)
+	fmt.Printf("p99.9 Response: %v\n", stats.P999)
 	fmt.Printf("Requests/sec: %.2f\n", stats.RequestsPerSec)
 	if config.Duration > 0 {
 		fmt.Printf("Requested Duration: %v\n", config.Duration)
@@ -110,11 +116,14 @@ func ReportJSON(config Config, stats Stats) ([]byte, error) {
 		MaxResponseTime:     ms(stats.MaxResponseTime),
 		AvgResponseTime:     ms(stats.AvgResponseTime),
 		P50:                 ms(stats.P50),
+		P90:                 ms(stats.P90),
 		P95:                 ms(stats.P95),
 		P99:                 ms(stats.P99),
+		P999:                ms(stats.P999),
 		RequestsPerSec:      stats.RequestsPerSec,
 		TotalDuration:       stats.TotalDuration.Milliseconds(),
 		RequestedDurationMs: config.Duration.Milliseconds(),
+		Arrival:             stats.Arrival,
 		StatusCodes:         stats.StatusCodes,
 		Errors:              stats.Errors,
 	}
@@ -179,8 +188,10 @@ func PrintStatsTable(config Config, stats Stats) {
 
 	fmt.Println(row("Avg Latency", fmt.Sprintf("%.2f ms", ms(stats.AvgResponseTime))))
 	fmt.Println(row("p50 Latency", fmt.Sprintf("%.2f ms", ms(stats.P50))))
+	fmt.Println(row("p90 Latency", fmt.Sprintf("%.2f ms", ms(stats.P90))))
 	fmt.Println(row("p95 Latency", fmt.Sprintf("%.2f ms", ms(stats.P95))))
 	fmt.Println(row("p99 Latency", fmt.Sprintf("%.2f ms", ms(stats.P99))))
+	fmt.Println(row("p99.9 Latency", fmt.Sprintf("%.2f ms", ms(stats.P999))))
 	fmt.Println(row("Min", fmt.Sprintf("%.2f ms", ms(stats.MinResponseTime))))
 	fmt.Println(row("Max", fmt.Sprintf("%.2f ms", ms(stats.MaxResponseTime))))
 	fmt.Printf("  %s\n", strings.Repeat("─", L+2)+"┼"+strings.Repeat("─", R+2))
@@ -224,8 +235,10 @@ func PrintStatsCSV(config Config, stats Stats) {
 	fmt.Printf("success_rate,%.2f\n", successRate)
 	fmt.Printf("avg_latency_ms,%.2f\n", ms(stats.AvgResponseTime))
 	fmt.Printf("p50_ms,%.2f\n", ms(stats.P50))
+	fmt.Printf("p90_ms,%.2f\n", ms(stats.P90))
 	fmt.Printf("p95_ms,%.2f\n", ms(stats.P95))
 	fmt.Printf("p99_ms,%.2f\n", ms(stats.P99))
+	fmt.Printf("p999_ms,%.2f\n", ms(stats.P999))
 	fmt.Printf("min_ms,%.2f\n", ms(stats.MinResponseTime))
 	fmt.Printf("max_ms,%.2f\n", ms(stats.MaxResponseTime))
 	fmt.Printf("rps,%.2f\n", stats.RequestsPerSec)
@@ -239,22 +252,25 @@ func PrintStatsCSV(config Config, stats Stats) {
 }
 
 // PrintStatsQuiet renders only numbers, comma-separated (for CI/CD).
-// In duration mode a requested-seconds field is appended as the last
-// column; count-mode output stays byte-identical to previous versions.
+// Column layout: total,successful,failed,success_rate,avg,p50,p90,p95,p99,
+// p999,rps[,requested_seconds]. Columns 1–9 are unchanged from earlier
+// versions; p90/p999 were inserted after p99 as additive columns.
 func PrintStatsQuiet(config Config, stats Stats) {
 	successRate := 0.0
 	if stats.TotalRequests > 0 {
 		successRate = float64(stats.Successful) / float64(stats.TotalRequests) * 100
 	}
-	line := fmt.Sprintf("%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
+	line := fmt.Sprintf("%d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f",
 		stats.TotalRequests,
 		stats.Successful,
 		stats.Failed,
 		successRate,
 		ms(stats.AvgResponseTime),
 		ms(stats.P50),
+		ms(stats.P90),
 		ms(stats.P95),
 		ms(stats.P99),
+		ms(stats.P999),
 		stats.RequestsPerSec,
 	)
 	if config.Duration > 0 {

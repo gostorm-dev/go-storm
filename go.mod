@@ -8,7 +8,6 @@ require (
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/schollz/progressbar/v3 v3.19.1
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/time v0.15.0
 )
 
 require (

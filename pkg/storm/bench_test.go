@@ -3,6 +3,7 @@ package storm
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -106,5 +107,35 @@ func BenchmarkCollectorCompare(b *testing.B) {
 				_ = c.Stats()
 			}
 		})
+	}
+}
+
+// BenchmarkLogHistogramObserve measures the hot-path recording cost of the
+// bounded-error histogram. Baseline for regression tracking.
+func BenchmarkLogHistogramObserve(b *testing.B) {
+	h := NewLogHistogram()
+	d := 42 * time.Millisecond
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		h.Observe(d)
+	}
+}
+
+// BenchmarkLogHistogramPercentile measures a read over a realistically
+// filled histogram (~40k samples spread across binades). Reads run ~5× per
+// report, so this must stay far below request-path costs.
+func BenchmarkLogHistogramPercentile(b *testing.B) {
+	rng := rand.New(rand.NewSource(1))
+	h := NewLogHistogram()
+	for i := 0; i < 40000; i++ {
+		h.Observe(time.Duration(rng.Float64()*float64(5*time.Second)) + time.Microsecond)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = h.Percentile(99)
 	}
 }

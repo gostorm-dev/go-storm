@@ -48,37 +48,3 @@ func TestJSONLatencyPrecision(t *testing.T) {
 		t.Errorf("p50_ms = %v, want ~0.5 (sleep was 500µs)", report.P50)
 	}
 }
-
-// TestHistogramBoundaryClassification verifies fractional-millisecond
-// observations land in the correct bucket (1.4ms belongs in ≤5, not ≤1).
-func TestHistogramBoundaryClassification(t *testing.T) {
-	h := NewHistogram()
-	h.Observe(1400 * time.Microsecond) // 1.4ms
-
-	// Bucket layout: [1, 5, 10, ...] → counts[0] is "≤1", counts[1] is "≤5".
-	if h.counts[0] != 0 {
-		t.Errorf("1.4ms wrongly landed in ≤1 bucket (counts=%v)", h.counts)
-	}
-	if h.counts[1] != 1 {
-		t.Errorf("1.4ms should land in ≤5 bucket (counts=%v)", h.counts)
-	}
-	if h.total != 1 {
-		t.Errorf("total = %d, want 1", h.total)
-	}
-}
-
-// TestPercentileInterpolation verifies percentiles interpolate within a
-// bucket instead of snapping to its upper bound. 10 observations of 6ms all
-// land in the ≤10 bucket; p50 must estimate 7.5ms (midpoint), not 10ms.
-func TestPercentileInterpolation(t *testing.T) {
-	h := NewHistogram()
-	for i := 0; i < 10; i++ {
-		h.Observe(6 * time.Millisecond)
-	}
-
-	got := h.Percentile(50)
-	want := 7500 * time.Microsecond // 5 + 0.5*(10-5)
-	if got != want {
-		t.Errorf("Percentile(50) = %v, want %v (interpolated midpoint)", got, want)
-	}
-}

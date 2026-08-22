@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gostorm-dev/go-storm/internal/transport"
-	"golang.org/x/time/rate"
 )
 
 // Config holds every parameter the engine needs.
@@ -19,7 +18,12 @@ type Config struct {
 	Timeout     time.Duration
 	Method      string
 	Payload     []byte
-	Rate        int
+
+	// Rate enables constant-arrival scheduling at exactly Rate jobs/sec:
+	// duration mode dispatches exactly ceil(Duration × Rate) requests on
+	// fixed slots; count mode paces TotalReqs at Rate per second. Zero
+	// means unpaced.
+	Rate int
 
 	// Duration runs the test for a wall-clock window instead of a request
 	// count. Zero means count mode (TotalReqs governs).
@@ -85,11 +89,24 @@ type Stats struct {
 	AvgResponseTime time.Duration
 	TotalDuration   time.Duration
 	P50             time.Duration
+	P90             time.Duration
 	P95             time.Duration
 	P99             time.Duration
+	P999            time.Duration
 	RequestsPerSec  float64
 	StatusCodes     map[int]int
 	Errors          []string
+
+	// Schedule adherence for rate-limited runs (nil otherwise): how well
+	// the generator held its own arrival slots.
+	Arrival *ArrivalAccuracy
+
+	// Set when saturation kill mode ended the run before the requested
+	// workload completed. Consumers should treat such results as a warning,
+	// not a clean measurement.
+	KilledOnSaturation bool    `json:"killed_on_saturation,omitempty"`
+	KillReason         string  `json:"kill_reason,omitempty"`
+	KilledAtMS         float64 `json:"killed_at_ms,omitempty"`
 }
 
 // minDuration is the smallest meaningful duration-mode window. Below this,
@@ -164,10 +181,6 @@ func NewLoadTester(ctx context.Context, config Config) *LoadTester {
 		thresholds:     DefaultThresholds(),
 		transportStats: tStats,
 		connStats:      connStats,
-	}
-
-	if config.Rate > 0 {
-		lt.limiter = rate.NewLimiter(rate.Limit(config.Rate), config.Rate)
 	}
 
 	return lt

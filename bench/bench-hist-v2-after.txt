@@ -1,0 +1,11 @@
+goos: linux
+goarch: amd64
+pkg: github.com/gostorm-dev/go-storm/pkg/storm
+cpu: AMD Ryzen 5 5500U with Radeon Graphics         
+BenchmarkCollectorCompare/Collector/1000-12         	   15214	     82513 ns/op	   33008 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/10000-12        	    2437	    501230 ns/op	   33008 B/op	       4 allocs/op
+BenchmarkCollectorCompare/Collector/100000-12       	     246	   4865611 ns/op	   33008 B/op	       4 allocs/op
+BenchmarkLogHistogramObserve-12                     	262001604	         4.508 ns/op	       0 B/op	       0 allocs/op
+BenchmarkLogHistogramPercentile-12                  	  218826	      5012 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/gostorm-dev/go-storm/pkg/storm	8.873s

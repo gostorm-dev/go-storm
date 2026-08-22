@@ -397,15 +397,14 @@ func TestCollectResultsPercentiles(t *testing.T) {
 
 	lt.collectResults()
 
-	if lt.stats.P50 != 50*time.Millisecond {
-		t.Errorf("P50 = %v, want %v", lt.stats.P50, 50*time.Millisecond)
+	if lt.stats.TotalRequests != 10 {
+		t.Errorf("TotalRequests = %d, want 10", lt.stats.TotalRequests)
 	}
-	if lt.stats.P95 != 100*time.Millisecond {
-		t.Errorf("P95 = %v, want %v", lt.stats.P95, 100*time.Millisecond)
-	}
-	if lt.stats.P99 != 100*time.Millisecond {
-		t.Errorf("P99 = %v, want %v", lt.stats.P99, 100*time.Millisecond)
-	}
+	// Streaming percentiles are bounded-error estimates of the exact
+	// nearest-rank values (p50=50ms, p95=p99=100ms), never exact matches.
+	checkRelErr(t, "P50", lt.stats.P50, 50*time.Millisecond)
+	checkRelErr(t, "P95", lt.stats.P95, 100*time.Millisecond)
+	checkRelErr(t, "P99", lt.stats.P99, 100*time.Millisecond)
 }
 
 func TestCompletedCounter(t *testing.T) {

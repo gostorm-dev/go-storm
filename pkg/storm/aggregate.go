@@ -77,8 +77,10 @@ func Aggregate(results []Result) Stats {
 		MaxResponseTime: maxDuration,
 		AvgResponseTime: avgDuration,
 		P50:             percentile(durations, 50),
+		P90:             percentile(durations, 90),
 		P95:             percentile(durations, 95),
 		P99:             percentile(durations, 99),
+		P999:            percentile(durations, 99.9),
 		StatusCodes:     statusCodes,
 		Errors:          errors,
 	}

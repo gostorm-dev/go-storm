@@ -208,11 +208,14 @@ func TestDurationMode_WithRateLimit(t *testing.T) {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	// Limiter starts with a full burst bucket (burst = Rate), then sustains
-	// Rate/s: 50 burst + 50/s × 2s = ~150 total; wide bounds so scheduler
-	// jitter on loaded machines does not flake.
-	if stats.TotalRequests < 120 || stats.TotalRequests > 180 {
-		t.Fatalf("rate+duration produced %d requests, want ~150 (120..180)", stats.TotalRequests)
+	// Virtual-clock scheduling sends exactly ceil(duration × rate) = 100.
+	// (The old token-bucket limiter sent ~150 here — full-burst bucket +
+	// pacing — which this test once codified as "expected".)
+	if stats.TotalRequests != 100 {
+		t.Fatalf("rate+duration produced %d requests, want exactly 100", stats.TotalRequests)
+	}
+	if stats.Arrival == nil || stats.Arrival.Sent != 100 {
+		t.Fatalf("arrival telemetry missing or wrong: %+v", stats.Arrival)
 	}
 }
 

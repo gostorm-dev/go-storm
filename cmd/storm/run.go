@@ -194,6 +194,9 @@ using a pool of concurrent workers. Optionally throttle throughput with
 		// Enable saturation monitoring
 		if saturation {
 			tester.EnableSaturationMonitoring()
+			if saturationKill {
+				tester.EnableSaturationKill()
+			}
 		}
 
 		// Optional Prometheus metrics endpoint

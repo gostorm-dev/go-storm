@@ -2,17 +2,20 @@ package storm
 
 import "time"
 
-// produceJobs fills the jobs channel according to the configured workload
-// termination condition: TotalReqs dispatched (count mode) or the wall-clock
-// deadline reached (duration mode). It respects cancellation so a shutdown
-// doesn't leak the goroutine.
+// produceJobs fills the jobs channel according to the configured workload.
 //
-// The deadline is captured once, before the loop starts, and never written
-// again — no synchronization is needed. time.Now() is called once per
-// produced job (never per request in workers), which is noise even at
-// 100k+ jobs/sec.
+// With --rate set, dispatch follows a virtual-clock arrival schedule
+// (see arrival.go): job j is due at start + j·(1s/rate), and in duration
+// mode exactly ceil(rate×duration) jobs are dispatched. Without --rate,
+// behavior is unchanged — count mode streams until TotalReqs, duration
+// mode until the wall-clock deadline.
 func (lt *LoadTester) produceJobs() {
 	defer close(lt.jobs)
+
+	if lt.config.Rate > 0 {
+		lt.produceScheduled()
+		return
+	}
 
 	var deadline time.Time
 	if lt.config.Duration > 0 {
@@ -29,24 +32,22 @@ func (lt *LoadTester) produceJobs() {
 		}
 		i++
 
-		if lt.limiter != nil {
-			if err := lt.limiter.Wait(lt.ctx); err != nil {
-				return
-			}
-		}
-
-		job := Job{
-			ID:      i,
-			URL:     lt.config.URL,
-			Method:  lt.config.Method,
-			Body:    lt.config.Payload,
-			Headers: lt.config.Headers,
-		}
-
 		select {
 		case <-lt.ctx.Done():
 			return
-		case lt.jobs <- job:
+		case lt.jobs <- lt.job(i):
 		}
+	}
+}
+
+// job builds a request for one arrival slot. The returned Job shares the
+// config's URL/body/header storage — workers must treat them as read-only.
+func (lt *LoadTester) job(id int64) Job {
+	return Job{
+		ID:      id,
+		URL:     lt.config.URL,
+		Method:  lt.config.Method,
+		Body:    lt.config.Payload,
+		Headers: lt.config.Headers,
 	}
 }

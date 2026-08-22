@@ -104,8 +104,16 @@ type HealthReport struct {
 	MaxMemoryMB     float64
 	Recommendations []string
 
+	// Set when saturation kill mode terminated the run early.
+	KilledOnSaturation bool
+	KillReason         string
+	KilledAt           time.Duration
+
 	// Connection pool statistics
 	ConnectionPoolStats *ConnectionPoolStats
+
+	// Arrival schedule adherence (rate-limited runs only).
+	Arrival *ArrivalAccuracy
 }
 
 // ConnectionPoolStats tracks connection pool metrics.
@@ -326,6 +334,26 @@ func FormatHealthReport(hr HealthReport) string {
 		b.WriteString("\n")
 	}
 
+	// --- Arrival Schedule ---
+	if hr.Arrival != nil {
+		b.WriteString("Arrival Schedule\n")
+		b.WriteString(fmt.Sprintf("  Dispatched:       %d / %d slots\n",
+			hr.Arrival.Sent, hr.Arrival.Sent))
+		b.WriteString(fmt.Sprintf("  Slot interval:    %.2f ms\n", hr.Arrival.IntervalMS))
+		accIcon := "✅"
+		switch {
+		case hr.Arrival.AccuracyPct < 90:
+			accIcon = "🔴"
+		case hr.Arrival.AccuracyPct < 98:
+			accIcon = "⚠️ "
+		}
+		b.WriteString(fmt.Sprintf("  On-time slots:    %.2f%% (%d late) %s\n",
+			hr.Arrival.AccuracyPct, hr.Arrival.Late, accIcon))
+		b.WriteString(fmt.Sprintf("  Lag p50/p99/max:  %.2f / %.2f / %.2f ms\n",
+			hr.Arrival.LagP50MS, hr.Arrival.LagP99MS, hr.Arrival.MaxLagMS))
+		b.WriteString("\n")
+	}
+
 	// --- Signals ---
 	b.WriteString("Checks\n")
 	for _, s := range hr.Signals {
@@ -342,16 +370,22 @@ func FormatHealthReport(hr HealthReport) string {
 
 	// --- Verdict ---
 	b.WriteString("───────────────────────────────────────────────\n")
-	switch hr.Level {
-	case OK:
-		b.WriteString("  ✅ GENERATOR HEALTHY\n")
-		b.WriteString("  Results are trustworthy.\n")
-	case WARN:
-		b.WriteString("  ⚠️  GENERATOR UNDER PRESSURE\n")
-		b.WriteString("  Results are likely valid but monitor closely.\n")
-	case CRITICAL:
-		b.WriteString("  🔴 GENERATOR SATURATED\n")
-		b.WriteString("  Results may NOT be representative of target.\n")
+	if hr.KilledOnSaturation {
+		b.WriteString(fmt.Sprintf("  ⛔ TEST TERMINATED AT %s — GENERATOR SATURATED\n", hr.KilledAt.Round(time.Millisecond)))
+		b.WriteString(fmt.Sprintf("  Reason: %s\n", hr.KillReason))
+		b.WriteString("  Results cover only the completed portion of the workload.\n")
+	} else {
+		switch hr.Level {
+		case OK:
+			b.WriteString("  ✅ GENERATOR HEALTHY\n")
+			b.WriteString("  Results are trustworthy.\n")
+		case WARN:
+			b.WriteString("  ⚠️  GENERATOR UNDER PRESSURE\n")
+			b.WriteString("  Results are likely valid but monitor closely.\n")
+		case CRITICAL:
+			b.WriteString("  🔴 GENERATOR SATURATED\n")
+			b.WriteString("  Results may NOT be representative of target.\n")
+		}
 	}
 	b.WriteString("───────────────────────────────────────────────\n")
 
@@ -373,6 +407,11 @@ func GenerateRecommendations(hr HealthReport) []string {
 
 	if hr.TargetRPS > 0 && hr.AchievedRPS/hr.TargetRPS < 0.90 {
 		recs = append(recs, "Reduce target RPS or use distributed mode")
+	}
+	if hr.Arrival != nil && hr.Arrival.AccuracyPct < 95 {
+		recs = append(recs, fmt.Sprintf(
+			"Generator missed %.1f%% of its own arrival slots — reduce rate or concurrency; results may under-deliver the requested workload",
+			100-hr.Arrival.AccuracyPct))
 	}
 	if hr.Stats.CPUUsage > 90 {
 		recs = append(recs, "Reduce concurrency to lower CPU pressure")
