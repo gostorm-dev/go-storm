@@ -33,8 +33,6 @@ Documentation: https://gostorm-dev.github.io/docs/`,
 }
 
 func main() {
-	rootCmd.PersistentFlags().StringVar(&redisAddr, "redis", "localhost:6379", "Redis address for distributed mode")
-
 	rootCmd.AddCommand(runCmd, runDistCmd, agentCmd, reportCmd, versionCmd)
 
 	if err := rootCmd.Execute(); err != nil {

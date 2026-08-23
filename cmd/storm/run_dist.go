@@ -192,6 +192,7 @@ func printAgentBreakdown(breakdown []dist.AgentStats) {
 }
 
 func init() {
+	runDistCmd.Flags().StringVar(&redisAddr, "redis", "localhost:6379", "Redis address shared with the agents")
 	runDistCmd.Flags().StringVarP(&url, "url", "u", "", "Target URL (required)")
 	runDistCmd.Flags().IntVarP(&distTotal, "requests", "n", 100, "Total requests to send")
 	runDistCmd.Flags().StringVarP(&method, "method", "m", "GET", "HTTP method: GET, POST, PUT, DELETE")

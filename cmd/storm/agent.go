@@ -100,6 +100,7 @@ func agentID(name string) string {
 }
 
 func init() {
+	agentCmd.Flags().StringVar(&redisAddr, "redis", "localhost:6379", "Redis address of the coordinator")
 	agentCmd.Flags().StringVar(&agentName, "name", "", "Agent name (default: hostname-timestamp)")
 	agentCmd.Flags().IntVarP(&agentConcurrency, "concurrency", "c", 5, "Agent worker goroutines")
 	agentCmd.Flags().IntVarP(&agentTimeout, "timeout", "t", 10, "Request timeout in seconds")
