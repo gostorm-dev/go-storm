@@ -145,7 +145,7 @@ k6:
 
 ## Installation
 
-### Quick Install (Go 1.22+)
+### Quick Install (Go 1.26+)
 
 ```bash
 go install github.com/gostorm-dev/go-storm/cmd/storm@latest
@@ -359,6 +359,9 @@ Checks
 
 ```json
 {
+  "tool_version": "v0.5.6",
+  "git_commit": "9f2c1ab...",
+  "built_at": "2026-08-23T04:00:00Z",
   "url": "https://example.com",
   "method": "GET",
   "concurrency": 100,

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+
+	"github.com/gostorm-dev/go-storm/internal/buildinfo"
 )
 
 // ms converts a duration to fractional milliseconds without truncation.
@@ -17,7 +19,12 @@ func ms(d time.Duration) float64 {
 }
 
 // Report combines run metadata with results for machine-readable output.
+// Build identity (ToolVersion/GitCommit) travels with every report so a
+// result file can always be traced to the exact binary that produced it.
 type Report struct {
+	ToolVersion     string  `json:"tool_version"`
+	GitCommit       string  `json:"git_commit"`
+	BuiltAt         string  `json:"built_at"`
 	URL             string  `json:"url"`
 	Method          string  `json:"method"`
 	Concurrency     int     `json:"concurrency"`
@@ -60,6 +67,7 @@ type Report struct {
 func PrintStatsReport(config Config, stats Stats) {
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("LOAD TEST RESULTS")
+	fmt.Printf("go-storm %s (commit %s)\n", buildinfo.Version, buildinfo.Commit)
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Printf("URL: %s\n", config.URL)
 	fmt.Printf("Method: %s\n", config.Method)
@@ -117,6 +125,9 @@ func ReportJSON(config Config, stats Stats) ([]byte, error) {
 		successRate = float64(stats.Successful) / float64(stats.TotalRequests) * 100
 	}
 	report := Report{
+		ToolVersion:         buildinfo.Version,
+		GitCommit:           buildinfo.Commit,
+		BuiltAt:             buildinfo.Date,
 		URL:                 config.URL,
 		Method:              config.Method,
 		Concurrency:         config.Concurrency,
@@ -189,6 +200,7 @@ func PrintStatsTable(config Config, stats Stats) {
 	fmt.Printf("  %s\n", strings.Repeat("─", L+2)+"┼"+strings.Repeat("─", R+2))
 
 	fmt.Println(row("URL", truncate(config.URL, R)))
+	fmt.Println(row("Version", buildinfo.Version))
 	fmt.Println(row("Method", config.Method))
 	fmt.Println(row("Workers", fmt.Sprintf("%d", config.Concurrency)))
 	fmt.Printf("  %s\n", strings.Repeat("─", L+2)+"┼"+strings.Repeat("─", R+2))
@@ -251,6 +263,8 @@ func PrintStatsCSV(config Config, stats Stats) {
 		successRate = float64(stats.Successful) / float64(stats.TotalRequests) * 100
 	}
 	fmt.Println("metric,value")
+	fmt.Printf("tool_version,%s\n", buildinfo.Version)
+	fmt.Printf("git_commit,%s\n", buildinfo.Commit)
 	fmt.Printf("url,%s\n", config.URL)
 	fmt.Printf("method,%s\n", config.Method)
 	fmt.Printf("total,%d\n", stats.TotalRequests)

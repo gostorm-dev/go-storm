@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+
+	"github.com/gostorm-dev/go-storm/internal/buildinfo"
 )
 
 func runeCellWidth(r rune) int {
@@ -39,7 +41,7 @@ const bannerInnerPadding = 4
 // buildBanner renders the brand box sized to its content. Every returned
 // line has an identical display width, so the walls always connect.
 func buildBanner() []string {
-	title := fmt.Sprintf("go-storm %s", version)
+	title := fmt.Sprintf("go-storm %s", buildinfo.Version)
 	tagline := "The Load Tester That Tells Truth"
 
 	rows := []string{

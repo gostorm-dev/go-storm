@@ -5,13 +5,15 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/gostorm-dev/go-storm/internal/buildinfo"
 )
 
 var redisAddr string
 
 var rootCmd = &cobra.Command{
 	Use:     "storm",
-	Version: version,
+	Version: buildinfo.Version,
 	Short:   "A lightweight HTTP load testing tool",
 	Long: `go-storm — The Load Tester That Tells Truth
 

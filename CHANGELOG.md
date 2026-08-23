@@ -29,6 +29,18 @@ Engine unchanged in this release — measurement hygiene only.
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Build identity in every result** — `tool_version`, `git_commit` and `built_at` now lead every JSON report and appear in table/text/csv output, so any result file can be traced to the exact binary that produced it (reproducibility requirement). Values are injected at build time into a shared `internal/buildinfo` package consumed by both the CLI (`storm version`) and the engine; release binaries are additionally stripped (`-s -w`, ~30% smaller downloads).
+- **Release binaries carry real versions** — the release workflow stamps tag/SHA/build-date via ldflags; previously artifacts reported `version dev`.
+
+### Changed
+- README install requirement corrected to Go 1.26+ to match `go.mod`.
+- `bench/analyze.py` — generator CPU is now `%user+%nice+%system`; hypervisor `%steal` is reported separately instead of masquerading as load (root cause of Round 2's false regression alarm; see BENCHMARKS.md investigation).
+
+---
+
 ## [0.5.5] — 2026-08-22
 
 ### Added

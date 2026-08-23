@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/gostorm-dev/go-storm/internal/buildinfo"
 )
 
 func TestDisplayWidth_IgnoresANSI(t *testing.T) {
@@ -37,8 +39,8 @@ func TestBuildBanner_AllLinesEqualWidth(t *testing.T) {
 
 	for _, v := range versions {
 		t.Run(v, func(t *testing.T) {
-			version = v
-			defer func() { version = "dev" }()
+			buildinfo.Version = v
+			defer func() { buildinfo.Version = "dev" }()
 
 			lines := buildBanner()
 			var widths []int
@@ -59,8 +61,8 @@ func TestBuildBanner_AllLinesEqualWidth(t *testing.T) {
 }
 
 func TestBuildBanner_ContainsContent(t *testing.T) {
-	version = "v9.9.9-test"
-	defer func() { version = "dev" }()
+	buildinfo.Version = "v9.9.9-test"
+	defer func() { buildinfo.Version = "dev" }()
 
 	out := strings.Join(buildBanner(), "\n")
 	for _, want := range []string{"go-storm v9.9.9-test", "The Load Tester That Tells Truth"} {
