@@ -29,7 +29,19 @@ Engine unchanged in this release — measurement hygiene only.
 
 ---
 
-## [Unreleased]
+## [0.5.7] — 2026-08-23
+
+### Fixed
+- **Sustained-load throughput halved by connection-pool churn** — the default idle
+  pool (50/host, 200 total) sat below typical concurrency, so workers dialled a
+  fresh TCP connection per request. Kernel time hit 66.5% during soaks and
+  sustained throughput collapsed on real networks (loopback hid it entirely).
+  The engine now auto-sizes idle pools to `max(2×concurrency, 256)` and never
+  lowers explicit values; `--max-idle-conns` / `--max-idle-per-host` default to
+  `0` = auto; library callers get a properly pooled transport instead of Go's
+  stdlib defaults (2 idle per host). Measured on a dedicated c6i pair: 60s soak
+  at c=100 rose from ~29K to a stable ~45.8K RPS (+56%), p95 6.57ms → 4.40ms.
+  Full evidence trail in BENCHMARKS.md.
 
 ### Added
 - **Build identity in every result** — `tool_version`, `git_commit` and `built_at` now lead every JSON report and appear in table/text/csv output, so any result file can be traced to the exact binary that produced it (reproducibility requirement). Values are injected at build time into a shared `internal/buildinfo` package consumed by both the CLI (`storm version`) and the engine; release binaries are additionally stripped (`-s -w`, ~30% smaller downloads).
@@ -37,7 +49,10 @@ Engine unchanged in this release — measurement hygiene only.
 
 ### Changed
 - README install requirement corrected to Go 1.26+ to match `go.mod`.
-- `bench/analyze.py` — generator CPU is now `%user+%nice+%system`; hypervisor `%steal` is reported separately instead of masquerading as load (root cause of Round 2's false regression alarm; see BENCHMARKS.md investigation).
+- `bench/analyze.py` — generator CPU is now `%user+%nice+%system`; hypervisor `%steal`
+  is surfaced separately per run as defense-in-depth on shared-vCPU instances
+  (Round 2 sar data showed ≤0.02% steal — see BENCHMARKS.md for what the anomaly
+  actually was).
 
 ---
 
