@@ -6,6 +6,18 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.5.9] — 2026-08-23
+
+### Changed
+- **`--redis` is now scoped to the commands that use it** (`storm agent`,
+  `storm run-dist`) instead of leaking into every subcommand's help as a
+  global flag. Root help now shows only `-h/--version`; each distributed
+  command describes its own Redis relationship (coordinator address vs
+  agents-shared address). No behavior change — existing invocations are
+  unaffected; only help output is cleaner.
+
+---
+
 ## [0.5.8] — 2026-08-23
 
 ### Fixed
