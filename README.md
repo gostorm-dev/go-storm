@@ -249,7 +249,8 @@ storm run -u https://example.com -n 1000 --format table
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--url` | `-u` | *(required)* | Target URL |
-| `--requests` | `-n` | `100` | Total requests |
+| `--requests` | `-n` | `0` | Total requests (mutually exclusive with `--duration`) |
+| `--duration` | `-d` | `0` | Test duration: `30s`, `5m`, `1h` (mutually exclusive with `--requests`) |
 | `--concurrency` | `-c` | `10` | Parallel workers |
 | `--method` | `-m` | `GET` | HTTP method |
 | `--timeout` | `-t` | `10` | Request timeout (seconds) |
@@ -264,8 +265,8 @@ storm run -u https://example.com -n 1000 --format table
 | `--estimate` | | `false` | Pre-test capacity estimation |
 | `--saturation-kill` | | `false` | Terminate test on sustained critical generator saturation (CPU/GC/FDs/goroutines/memory) |
 | `--metrics-port` | | `0` | Prometheus port (0 = disabled) |
-| `--max-idle-conns` | | `200` | Max idle connections |
-| `--max-idle-per-host` | | `50` | Max idle per host |
+| `--max-idle-conns` | | `0` *(auto)* | Max idle connections — auto-sizes to at least `2×concurrency` (min 256) |
+| `--max-idle-per-host` | | `0` *(auto)* | Max idle connections per host (auto, same rule) |
 | `--idle-timeout` | | `90` | Idle connection timeout (s) |
 | `--keep-alive` | | `30` | TCP keep-alive (s) |
 | `--force-http2` | | `true` | Force HTTP/2 |
