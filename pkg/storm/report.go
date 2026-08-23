@@ -159,20 +159,31 @@ func ReportJSON(config Config, stats Stats) ([]byte, error) {
 	return json.MarshalIndent(report, "", "  ")
 }
 
-// padRight pads a string to the given width with spaces.
+// padRight pads a string to exactly width display columns, cutting
+// grapheme-safely with a ".." marker when too wide (see textui.go).
 func padRight(s string, width int) string {
-	if len(s) >= width {
-		return s[:width]
-	}
-	return s + strings.Repeat(" ", width-len(s))
+	return fitCell(s, width)
 }
 
-// padLeft left-aligns a string to the given width with spaces.
+// padLeft right-aligns a string in exactly width display columns,
+// cutting grapheme-safely with a ".." marker when too wide (see textui.go).
 func padLeft(s string, width int) string {
-	if len(s) >= width {
-		return s[:width]
-	}
-	return strings.Repeat(" ", width-len(s)) + s
+	fitted := fitCell(s, width)
+	return strings.Repeat(" ", width-displayWidth(fitted)) + fitted
+}
+
+// tableRule builds one horizontal border line for the two-column stats
+// table. The junction glyphs must land on exactly the columns where the
+// data rows print their │ walls, so the grid is fully connected:
+//
+//	row:  "  │ <label> │ <value> │"   walls at cols 2, 2+lw+3, 2+lw+rw+5
+//	rule: "  ├─────────┼──────────┤"  same three columns
+//
+// left/mid/right select the glyph set: ┌┬┐ top, ├┼┤ middle, └┴┘ bottom.
+func tableRule(left, mid, right string, leftWidth, rightWidth int) string {
+	return "  " + left +
+		strings.Repeat("─", leftWidth+2) + mid +
+		strings.Repeat("─", rightWidth+2) + right
 }
 
 // PrintStatsTable renders results in a formatted table.
@@ -194,16 +205,22 @@ func PrintStatsTable(config Config, stats Stats) {
 		return fmt.Sprintf("  │ %s │ %s │", padRight(label, L), padLeft(value, R))
 	}
 
+	// rule draws a horizontal border whose junction glyphs land exactly on
+	// the three wall columns of a data row (see tableRule).
+	rule := func(l, m, r string) string {
+		return tableRule(l, m, r, L, R)
+	}
+
 	fmt.Println()
-	fmt.Printf("  %s\n", strings.Repeat("─", L+2)+"┼"+strings.Repeat("─", R+2))
+	fmt.Println(rule("┌", "┬", "┐"))
 	fmt.Printf("  │ %s │ %s │\n", bold(padRight("Metric", L)), bold(padLeft("Value", R)))
-	fmt.Printf("  %s\n", strings.Repeat("─", L+2)+"┼"+strings.Repeat("─", R+2))
+	fmt.Println(rule("├", "┼", "┤"))
 
 	fmt.Println(row("URL", truncate(config.URL, R)))
 	fmt.Println(row("Version", buildinfo.Version))
 	fmt.Println(row("Method", config.Method))
 	fmt.Println(row("Workers", fmt.Sprintf("%d", config.Concurrency)))
-	fmt.Printf("  %s\n", strings.Repeat("─", L+2)+"┼"+strings.Repeat("─", R+2))
+	fmt.Println(rule("├", "┼", "┤"))
 
 	fmt.Println(row("Total", fmt.Sprintf("%d", stats.TotalRequests)))
 	fmt.Println(row("Successful", fmt.Sprintf("%d", stats.Successful)))
@@ -214,7 +231,7 @@ func PrintStatsTable(config Config, stats Stats) {
 	} else {
 		fmt.Printf("  │ %s │ %s │\n", padRight("Success Rate", L), green(padLeft(fmt.Sprintf("%.2f%%", successRate), R)))
 	}
-	fmt.Printf("  %s\n", strings.Repeat("─", L+2)+"┼"+strings.Repeat("─", R+2))
+	fmt.Println(rule("├", "┼", "┤"))
 
 	fmt.Println(row("Avg Latency", fmt.Sprintf("%.2f ms", ms(stats.AvgResponseTime))))
 	fmt.Println(row("p50 Latency", fmt.Sprintf("%.2f ms", ms(stats.P50))))
@@ -230,14 +247,14 @@ func PrintStatsTable(config Config, stats Stats) {
 	}
 	fmt.Println(row("Min", fmt.Sprintf("%.2f ms", ms(stats.MinResponseTime))))
 	fmt.Println(row("Max", fmt.Sprintf("%.2f ms", ms(stats.MaxResponseTime))))
-	fmt.Printf("  %s\n", strings.Repeat("─", L+2)+"┼"+strings.Repeat("─", R+2))
+	fmt.Println(rule("├", "┼", "┤"))
 
 	fmt.Println(row("RPS", fmt.Sprintf("%.2f", stats.RequestsPerSec)))
 	if config.Duration > 0 {
 		fmt.Println(row("Requested", config.Duration.String()))
 	}
 	fmt.Println(row("Duration", fmt.Sprintf("%.2f s", stats.TotalDuration.Seconds())))
-	fmt.Printf("  %s\n", strings.Repeat("─", L+2)+"┴"+strings.Repeat("─", R+2))
+	fmt.Println(rule("└", "┴", "┘"))
 
 	if len(stats.StatusCodes) > 0 {
 		fmt.Println()
@@ -324,9 +341,14 @@ func PrintStatsQuiet(config Config, stats Stats) {
 	fmt.Println(line)
 }
 
+// truncate cuts s to max display columns with a "..." marker, never
+// splitting a rune or grapheme cluster (see textui.go).
 func truncate(s string, max int) string {
-	if len(s) > max {
-		return s[:max-3] + "..."
+	if displayWidth(s) <= max {
+		return s
 	}
-	return s
+	if max <= 3 {
+		return cutToWidth(s, max)
+	}
+	return cutToWidth(s, max-3) + "..."
 }

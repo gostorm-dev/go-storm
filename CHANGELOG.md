@@ -6,6 +6,40 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.5.8] — 2026-08-23
+
+### Fixed
+- **Result tables can no longer break** — every fixed-width table cell is now measured and cut in terminal *display columns* instead of bytes. Previously a long value (e.g. an extended version string) was hard-chopped without a marker, and any multi-byte content (CJK URLs, emoji) corrupted mid-rune or shifted the borders. New `fitCell`/`cutToWidth` primitives are grapheme-cluster aware (emoji + ZWJ count once, East Asian wide chars twice), ANSI-stripped, and truncate with a visible `..` marker; property-tested over mixed-script fuzzing so borders align by construction.
+- README now carries the ASCII brand banner matching the CLI.
+
+---
+
+## [0.5.7] — 2026-08-23
+
+### Fixed
+- **Sustained-load throughput halved by connection-pool churn** — the default idle
+  pool (50/host, 200 total) sat below typical concurrency, so workers dialled a
+  fresh TCP connection per request. Kernel time hit 66.5% during soaks and
+  sustained throughput collapsed on real networks (loopback hid it entirely).
+  The engine now auto-sizes idle pools to `max(2×concurrency, 256)` and never
+  lowers explicit values; `--max-idle-conns` / `--max-idle-per-host` default to
+  `0` = auto; library callers get a properly pooled transport instead of Go's
+  stdlib defaults (2 idle per host). Measured on a dedicated c6i pair: 60s soak
+  at c=100 rose from ~29K to a stable ~45.8K RPS (+56%), p95 6.57ms → 4.40ms;
+  verified across Round 3: 46,018 RPS median soak, zero failures in 12.6M requests.
+  Full evidence trail in BENCHMARKS.md.
+
+### Added
+- **Build identity in every result** — `tool_version`, `git_commit` and `built_at` now lead every JSON report and appear in table/text/csv output, so any result file can be traced to the exact binary that produced it (reproducibility requirement). Values are injected at build time into a shared `internal/buildinfo` package consumed by both the CLI (`storm version`) and the engine; release binaries are additionally stripped (`-s -w`, ~30% smaller downloads).
+- **Release binaries carry real versions** — the release workflow stamps tag/SHA/build-date via ldflags; previously artifacts reported `version dev`.
+
+### Changed
+- README install requirement corrected to Go 1.26+ to match `go.mod`.
+- README benchmark section updated with Round 3 results (soak +77% vs k6,
+  ceiling 2.1×, rate-mode p99 6.7× lower).
+
+---
+
 ## [0.5.6] — 2026-08-23
 
 ### Changed
@@ -26,33 +60,6 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/).
   check), printing `None%` for every tool's generator CPU.
 
 Engine unchanged in this release — measurement hygiene only.
-
----
-
-## [0.5.7] — 2026-08-23
-
-### Fixed
-- **Sustained-load throughput halved by connection-pool churn** — the default idle
-  pool (50/host, 200 total) sat below typical concurrency, so workers dialled a
-  fresh TCP connection per request. Kernel time hit 66.5% during soaks and
-  sustained throughput collapsed on real networks (loopback hid it entirely).
-  The engine now auto-sizes idle pools to `max(2×concurrency, 256)` and never
-  lowers explicit values; `--max-idle-conns` / `--max-idle-per-host` default to
-  `0` = auto; library callers get a properly pooled transport instead of Go's
-  stdlib defaults (2 idle per host). Measured on a dedicated c6i pair: 60s soak
-  at c=100 rose from ~29K to a stable ~45.8K RPS (+56%), p95 6.57ms → 4.40ms.
-  Full evidence trail in BENCHMARKS.md.
-
-### Added
-- **Build identity in every result** — `tool_version`, `git_commit` and `built_at` now lead every JSON report and appear in table/text/csv output, so any result file can be traced to the exact binary that produced it (reproducibility requirement). Values are injected at build time into a shared `internal/buildinfo` package consumed by both the CLI (`storm version`) and the engine; release binaries are additionally stripped (`-s -w`, ~30% smaller downloads).
-- **Release binaries carry real versions** — the release workflow stamps tag/SHA/build-date via ldflags; previously artifacts reported `version dev`.
-
-### Changed
-- README install requirement corrected to Go 1.26+ to match `go.mod`.
-- `bench/analyze.py` — generator CPU is now `%user+%nice+%system`; hypervisor `%steal`
-  is surfaced separately per run as defense-in-depth on shared-vCPU instances
-  (Round 2 sar data showed ≤0.02% steal — see BENCHMARKS.md for what the anomaly
-  actually was).
 
 ---
 

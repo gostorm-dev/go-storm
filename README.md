@@ -5,10 +5,12 @@
 A high-performance HTTP load testing engine written in Go. Unlike other tools, go-storm detects when **YOUR generator is the bottleneck** — not just the target.
 
 ```
-  ╔═══════════════════════════════════════╗
-  ║          ⚡ go-storm                  ║
-  ║   The Load Tester That Tells Truth   ║
-  ╚═══════════════════════════════════════╝
+
+  ╔════════════════════════════════════╗
+  ║ ⚡ go-storm                        ║
+  ║ The Load Tester That Tells Truth   ║
+  ╚════════════════════════════════════╝
+
 ```
 
 [![CI](https://github.com/gostorm-dev/go-storm/actions/workflows/ci.yml/badge.svg)](https://github.com/gostorm-dev/go-storm/actions)
@@ -45,15 +47,22 @@ Reproducible lab: 2 × c6i.large (same AZ, private-IP traffic), warmup + 3 runs,
 median reported, `sar` monitoring on both machines. Full methodology and raw
 numbers in [**BENCHMARKS.md**](BENCHMARKS.md) · suite in [`bench/`](bench/).
 
-### Latest round (v0.5.3 build)
+### Latest round (v0.5.7 — Round 3)
 
-| Scenario | Result |
-|----------|--------|
-| **Rate accuracy** (`-r 5000 -d 30s`) | **5000.00 RPS — exact dispatch**, p99 0.55ms at 19% generator CPU (k6: p99 2.99ms @ 37% CPU) |
-| Sustained soak / ceiling | ⚠️ **known regression in v0.5.3** (−54–57% vs previous build, GC pressure) — caught by our own suite within hours of release; fix targeted v0.5.4 |
+| Scenario | go-storm | k6 | Delta |
+|----------|----------|-----|--------|
+| Sustained soak (60s, c=100) | **46,018 RPS**, p95 4.40ms | 25,964 RPS, p95 8.68ms | **+77% throughput** |
+| Generator ceiling (c=1000, 30s) | **39,687 RPS**, spread ±0.8% | 18,744 RPS | **2.1× throughput** |
+| Rate accuracy (`-r 5000 -d 30s`) | **5000.00 RPS — exact dispatch**, p99 0.41ms at 18% generator CPU | 5000 RPS, p99 2.75ms @ 37% CPU | **6.7× lower tail latency** |
+| Burst (100k req, c=100) | **45,583 RPS**, spread ±0.7% | hey: 45,489 ±2.8% | storm wins |
 
-Honest scoreboard: **wrk still wins raw throughput** (C + epoll). We publish our
-losses and regressions too — that is the point of
+12,604,631 requests fired by go-storm this round — **zero failures**.
+`%steal` <1% in every sar window; all tools otherwise within noise of prior
+rounds, confirming the Round 3 gains come from the v0.5.7 pool fix.
+
+Honest scoreboard: **wrk still wins raw single-endpoint throughput**
+(64,774 RPS soak) — but ships no percentiles by default, no rate mode, no
+generator health reporting. We publish our losses too — that is the point of
 ["The Load Tester That Tells Truth"](BENCHMARKS.md).
 
 <details>
@@ -63,6 +72,18 @@ losses and regressions too — that is the point of
 |----------|----------|-----|--------|
 | Sustained soak (60s, c=100) | **35,870 RPS**, p99 9.7ms | 24,332 RPS, p99 16.0ms | **+47% throughput, −39% p99** |
 | Generator ceiling (c=1000, 30s) | **31,198 RPS** | 18,154 RPS | **+72% throughput** |
+
+</details>
+
+<details>
+<summary>Round 2 (v0.5.3): rate-overshoot fix verified, soak regression documented</summary>
+
+- S3 rate accuracy verified perfect: 5000.00 RPS median, exactly 150,000
+  requests ×3 runs, p99 0.55ms @ 19% CPU (k6: p99 2.99ms @ 37%).
+- Sustained soak collapsed to ~15K RPS with 66.5% kernel-space CPU.
+  Investigation: no code regression (four-binary A/B), %steal ruled out,
+  root cause = connection-pool churn — fixed in v0.5.7. Full trail in
+  [BENCHMARKS.md](BENCHMARKS.md).
 
 </details>
 
@@ -80,16 +101,16 @@ losses and regressions too — that is the point of
 ### Key Numbers
 
 ```
-go-storm:
-  ✅ 865,000+ requests tested — ZERO failures
-  ✅ 200K extreme load — completed in 27.7 seconds
-  ✅ 500K endurance test — 105.6 MB memory, no leaks
-  ✅ 94%+ connection reuse ratio
-  ✅ Generator health: HEALTHY across all tests
+go-storm (Round 3, dedicated c6i pair):
+  ✅ 12.6M requests fired — ZERO failures
+  ✅ +77% sustained throughput vs k6 (soak), 2.1× at ceiling
+  ✅ Perfect rate delivery: 5000.00/5000, p99 0.41ms @ 18% CPU
+  ✅ Run-to-run spread ±0.1–0.8% across all scenarios
+  ✅ Generator health self-reported on every run
 
 k6:
-  ❌ 200K test — crashed with EOF errors
-  ⚠️ 30-89% slower than go-storm across all tests
+  ⚠️ 30–44% slower across soak and ceiling
+  ⚠️ 6.7× worse tail latency in rate mode
   ❌ No generator health monitoring
 ```
 
