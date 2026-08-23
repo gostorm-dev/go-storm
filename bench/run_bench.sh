@@ -10,7 +10,7 @@ echo "tool,scenario,run,rps,p50_ms,p95_ms,p99_ms,total_reqs,failed,dur_s" > "$CS
 echo "tool,c_level,rps,err_pct" > "$BPCSV"
 
 log(){ echo "[$(date +%H:%M:%S)] $*"; }
-cooldown(){ log "cooldown 10s"; sleep 10; }
+cooldown(){ local s="${1:-10}"; log "cooldown ${s}s"; sleep "$s"; }
 start_sar(){ nohup sar -u -r 1 > "$SARD/$1.log" 2>&1 & echo $! > "$SARD/$1.pid"; sleep 1; }
 stop_sar(){ kill -INT "$(cat "$SARD/$1.pid")" 2>/dev/null; sleep 1; }
 
@@ -86,7 +86,7 @@ for run in warmup 1 2 3; do
   z=60s; [ "$run" = warmup ] && z=10s
   run_case storm S2 "$run" ~/storm-linux run -u "$TARGET" -d "$z" -c 100 --format json
   [ "$run" != warmup ] && emit storm S2 "$run" "$(p_storm "$RAW/storm_S2_run$run.out")"
-  cooldown
+  cooldown 30
 done
 for run in warmup 1 2 3; do
   z=60s; [ "$run" = warmup ] && z=10s
@@ -96,25 +96,25 @@ for run in warmup 1 2 3; do
   stop_sar "gen_k6_S2_run$run"
   log "k6_S2_run$run done"
   [ "$run" != warmup ] && emit k6 S2 "$run" "$(p_k6 "$RAW/k6_S2_run$run.json")"
-  cooldown
+  cooldown 30
 done
 for run in warmup 1 2 3; do
   z=60s; [ "$run" = warmup ] && z=10s
   run_case wrk S2 "$run" wrk -t8 -c100 --latency -d"$z" "$TARGET"
   [ "$run" != warmup ] && emit wrk S2 "$run" "$(p_wrk "$RAW/wrk_S2_run$run.out")"
-  cooldown
+  cooldown 30
 done
 for run in warmup 1 2 3; do
   z=60s; [ "$run" = warmup ] && z=10s
   run_case hey S2 "$run" hey -z "$z" -c 100 "$TARGET"
   [ "$run" != warmup ] && emit hey S2 "$run" "$(p_hey "$RAW/hey_S2_run$run.out")"
-  cooldown
+  cooldown 30
 done
 for run in warmup 1 2 3; do
   z=60s; [ "$run" = warmup ] && z=10s
   run_case vegeta S2 "$run" bash -c "echo GET $TARGET | vegeta attack -duration $z -rate 0 -max-workers 100 | vegeta report -type=json"
   [ "$run" != warmup ] && emit vegeta S2 "$run" "$(p_veg "$RAW/vegeta_S2_run$run.out")"
-  cooldown
+  cooldown 30
 done
 
 ########## S3: rate accuracy r=5000 d=30s (storm,k6,hey,vegeta) ##########

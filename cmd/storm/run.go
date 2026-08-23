@@ -127,10 +127,16 @@ using a pool of concurrent workers. Optionally throttle throughput with
 			cfg.Headers.Add(k, v)
 		}
 
-		// Create transport config from CLI flags
+		// Create transport config from CLI flags.
+		// Zero means auto: the engine sizes pools to at least one idle
+		// connection per worker (see sizeConnectionPool).
 		transportCfg := transport.DefaultConfig()
-		transportCfg.MaxIdleConns = maxIdleConns
-		transportCfg.MaxIdleConnsPerHost = maxIdlePerHost
+		if maxIdleConns > 0 {
+			transportCfg.MaxIdleConns = maxIdleConns
+		}
+		if maxIdlePerHost > 0 {
+			transportCfg.MaxIdleConnsPerHost = maxIdlePerHost
+		}
 		transportCfg.IdleConnTimeout = time.Duration(idleTimeout) * time.Second
 		transportCfg.KeepAlive = time.Duration(keepAlive) * time.Second
 		transportCfg.ForceHTTP2 = forceHTTP2
@@ -368,8 +374,8 @@ func init() {
 	runCmd.Flags().BoolVar(&saturationKill, "saturation-kill", false, "Kill test on critical saturation (vs warn only)")
 
 	// Connection pooling flags
-	runCmd.Flags().IntVar(&maxIdleConns, "max-idle-conns", 200, "Max idle connections across all hosts")
-	runCmd.Flags().IntVar(&maxIdlePerHost, "max-idle-per-host", 50, "Max idle connections per target host")
+	runCmd.Flags().IntVar(&maxIdleConns, "max-idle-conns", 0, "Max idle connections across all hosts (default: auto, at least concurrency)")
+	runCmd.Flags().IntVar(&maxIdlePerHost, "max-idle-per-host", 0, "Max idle connections per target host (default: auto, at least concurrency)")
 	runCmd.Flags().IntVar(&idleTimeout, "idle-timeout", 90, "Idle connection timeout in seconds")
 	runCmd.Flags().IntVar(&keepAlive, "keep-alive", 30, "TCP keep-alive interval in seconds")
 	runCmd.Flags().BoolVar(&forceHTTP2, "force-http2", true, "Force HTTP/2 protocol")

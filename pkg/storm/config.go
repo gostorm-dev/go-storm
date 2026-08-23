@@ -153,27 +153,54 @@ func (c Config) Validate() error {
 	return nil
 }
 
+// minAutoIdlePerHost is the floor for auto-sized idle pools. Sizing the
+// per-host pool to exactly concurrency still churns: transient checkout
+// races momentarily exceed the limit and connections get closed under
+// load. Measured on a real network (AWS c6i pair), 2×concurrency held
+// sustained throughput rock-stable while exact sizing swung −75%.
+const minAutoIdlePerHost = 256
+
+// sizeConnectionPool guarantees an idle pool with enough headroom that
+// workers never wait on a dial. A small pool forces connect/close churn
+// whose syscall cost dominates kernel time on real networks and halves
+// sustained throughput (see BENCHMARKS.md, Rounds 2–3). Values are only
+// ever raised, never lowered; concurrency ≤ 0 is a no-op.
+func sizeConnectionPool(tc *transport.Config, concurrency int) {
+	if tc == nil || concurrency <= 0 {
+		return
+	}
+	target := 2 * concurrency
+	if target < minAutoIdlePerHost {
+		target = minAutoIdlePerHost
+	}
+	if tc.MaxIdleConnsPerHost < target {
+		tc.MaxIdleConnsPerHost = target
+	}
+	if tc.MaxIdleConns < target {
+		tc.MaxIdleConns = target
+	}
+}
+
 // NewLoadTester builds a LoadTester from config.
 // It owns a cancellable context so workers can shut down gracefully.
 func NewLoadTester(ctx context.Context, config Config) *LoadTester {
 	ctx, cancel := context.WithCancel(ctx)
 
+	// Resolve transport: the engine never runs on Go's stdlib defaults
+	// (2 idle connections per host) — that silently converts a load test
+	// into a connection-dial benchmark.
+	if config.TransportConfig == nil {
+		tc := transport.DefaultConfig()
+		config.TransportConfig = &tc
+	}
+	sizeConnectionPool(config.TransportConfig, config.Concurrency)
+
 	// Create transport with connection pooling
-	var client *http.Client
-	var tStats *transport.Stats
-	if config.TransportConfig != nil {
-		// Use custom transport with connection pooling
-		t := transport.NewTransport(*config.TransportConfig)
-		tStats = t.Stats()
-		client = &http.Client{
-			Transport: t.Transport,
-			Timeout:   config.Timeout,
-		}
-	} else {
-		// Use default transport (backward compatible)
-		client = &http.Client{
-			Timeout: config.Timeout,
-		}
+	t := transport.NewTransport(*config.TransportConfig)
+	tStats := t.Stats()
+	client := &http.Client{
+		Transport: t.Transport,
+		Timeout:   config.Timeout,
 	}
 
 	// Create connection stats for httptrace
